@@ -874,29 +874,6 @@ const ActiveProgressCard = ({ stats }) => {
             />
           </Box>
         </Box>
-        <Box sx={{ mt: 0.5 }}>
-          <Typography
-            sx={{
-              color: theme.palette.app.text,
-              fontSize: "0.95rem",
-              fontWeight: 900,
-              mt:2
-            }}
-          >
-            Resumen de cobros
-          </Typography>
-
-          <Typography
-            sx={{
-              mt: 0.25,
-              color: theme.palette.app.secondary,
-              fontSize: "0.8rem",
-              fontWeight: 600,
-            }}
-          >
-            Estado pendiente de tus proyectos facturados.
-          </Typography>
-        </Box>
         <Box
           sx={{
             mt: "auto",
@@ -926,7 +903,29 @@ const ActiveProgressCard = ({ stats }) => {
             color={theme.palette.warning.main}
           />
         </Box>
+        <Box sx={{ mt: 0.5 }}>
+          <Typography
+            sx={{
+              color: theme.palette.app.text,
+              fontSize: "0.95rem",
+              fontWeight: 900,
+              mt:1.5
+            }}
+          >
+            Resumen de cobros
+          </Typography>
 
+          <Typography
+            sx={{
+              mt: 0.25,
+              color: theme.palette.app.secondary,
+              fontSize: "0.8rem",
+              fontWeight: 600,
+            }}
+          >
+            Estado pendiente de tus proyectos facturados.
+          </Typography>
+        </Box>
         <Box
           sx={{
             display: "grid",
