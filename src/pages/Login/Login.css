@@ -1,0 +1,20 @@
+/*Login*/
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  overscroll-behavior: none;
+  background: #020617;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
