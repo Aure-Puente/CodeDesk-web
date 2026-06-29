@@ -19,8 +19,12 @@ import {
   Avatar,
   Tooltip,
   Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
 import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
 import AssignmentRoundedIcon from "@mui/icons-material/AssignmentRounded";
@@ -36,19 +40,19 @@ import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
 import CodeRoundedIcon from "@mui/icons-material/CodeRounded";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
-import logoLight from "../assets/images/logo-light.png";
-import logoDark from "../assets/images/logo-dark.png";
-import Home from "../components/Home/Home";
-import Tareas from "../components/Tareas/Tareas";
-import Proyectos from "../components/Proyectos/Proyectos";
-import Pagos from "../components/Pagos/Pagos";
-import Notas from "../components/Notas/Notas";
-import Informes from "../components/Informes/Informes";
-import DataBase from "../components/DataBase/DataBase";
-import Credenciales from "../components/Credenciales/Credenciales";
-import Config from "../components/Config/Config";
-import { useThemeMode } from "../context/ThemeModeContext";
-import { useAuth } from "../context/AuthContext";
+import logoLight from "../../assets/images/logo-light.png";
+import logoDark from "../../assets/images/logo-dark.png";
+import Home from "../../components/Home/Home";
+import Tareas from "../../components/Tareas/Tareas";
+import Proyectos from "../../components/Proyectos/Proyectos";
+import Pagos from "../../components/Pagos/Pagos";
+import Notas from "../../components/Notas/Notas";
+import Informes from "../../components/Informes/Informes";
+import DataBase from "../../components/DataBase/DataBase";
+import Credenciales from "../../components/Credenciales/Credenciales";
+import Config from "../../components/Config/Config";
+import { useThemeMode } from "../../context/ThemeModeContext";
+import { useAuth } from "../../context/AuthContext";
 
 // JSX:
 const drawerWidth = 280;
@@ -119,6 +123,7 @@ const Dashboard = () => {
 
   const [selectedSection, setSelectedSection] = useState("inicio");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
 
   const dashboardLogo = isDark ? logoDark : logoLight;
@@ -241,66 +246,29 @@ const Dashboard = () => {
         flexDirection: "column",
       }}
     >
+    <Box
+      sx={{
+        px: 2.5,
+        py: 1.8,
+        height: 130,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
       <Box
+        component="img"
+        src={dashboardLogo}
+        alt="CodeDesk"
         sx={{
-          px: 2.5,
-          py: 2.8,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          width: 180,
+          height: 180,
+          marginTop: 1,
+          objectFit: "contain",
+          borderRadius: "24px",
         }}
-      >
-        <Stack
-          direction="row"
-          alignItems="center"
-          spacing={1.25}
-          sx={{
-            width: "100%",
-            minWidth: 0,
-          }}
-        >
-          <Box
-            component="img"
-            src={dashboardLogo}
-            alt="CodeDesk"
-            sx={{
-              width: 58,
-              height: 58,
-              objectFit: "contain",
-              flexShrink: 0,
-              borderRadius: "14px",
-            }}
-          />
-
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
-              noWrap
-              sx={{
-                fontWeight: 950,
-                color: theme.palette.app.text,
-                fontSize: "1.28rem",
-                lineHeight: 1.05,
-                letterSpacing: "-0.5px",
-              }}
-            >
-              CodeDesk
-            </Typography>
-
-            <Typography
-              noWrap
-              sx={{
-                color: theme.palette.app.secondary,
-                fontSize: "0.77rem",
-                fontWeight: 650,
-                mt: 0.35,
-              }}
-            >
-              Panel de organización
-            </Typography>
-          </Box>
-        </Stack>
-      </Box>
-
+      />
+    </Box>
       <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
 
       <List
@@ -461,7 +429,7 @@ const Dashboard = () => {
 
           <Button
             fullWidth
-            onClick={handleLogout}
+            onClick={() => setLogoutDialogOpen(true)}
             startIcon={<LogoutRoundedIcon />}
             sx={{
               minHeight: 36,
@@ -525,9 +493,12 @@ const Dashboard = () => {
         <Toolbar
           sx={{
             minHeight: {
-              xs: "66px !important",
-              md: "72px !important",
+              xs: "76px !important",
+              md: "82px !important",
             },
+            pt: { xs: 0.8, md: 1 },
+            pb: { xs: 0.7, md: 0.9 },
+            alignItems: "center",
             px: {
               xs: 1.5,
               sm: 2,
@@ -584,7 +555,7 @@ const Dashboard = () => {
                   letterSpacing: "-0.3px",
                 }}
               >
-                {currentSection?.title}
+                CodeDesk
               </Typography>
 
               <Typography
@@ -597,9 +568,10 @@ const Dashboard = () => {
                     sm: "block",
                   },
                   mt: 0.2,
+                  fontWeight: 600,
                 }}
               >
-                {currentSection?.description}
+                Todo tu flujo de trabajo centralizado en un solo lugar.              
               </Typography>
             </Box>
           </Stack>
@@ -721,8 +693,8 @@ const Dashboard = () => {
         sx={{
           flexGrow: 1,
           pt: {
-            xs: "66px",
-            md: "72px",
+            xs: "76px",
+            md: "82px",
           },
           minHeight: "100vh",
           minWidth: 0,
@@ -741,7 +713,178 @@ const Dashboard = () => {
           {renderSection()}
         </Box>
       </Box>
+
+      <LogoutConfirmDialog
+        open={logoutDialogOpen}
+        onClose={() => setLogoutDialogOpen(false)}
+        onConfirm={handleLogout}
+      />
     </Box>
+  );
+};
+
+const LogoutConfirmDialog = ({ open, onClose, onConfirm }) => {
+  const theme = useTheme();
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth="xs"
+      PaperProps={{
+        sx: {
+          borderRadius: "22px",
+          backgroundColor: theme.palette.app.surface,
+          backgroundImage: "none",
+          border: `1px solid ${theme.palette.app.borderSoft}`,
+          boxShadow:
+            theme.palette.mode === "dark"
+              ? "0 28px 90px rgba(0, 0, 0, 0.55)"
+              : "0 28px 80px rgba(15, 23, 42, 0.18)",
+          overflow: "hidden",
+        },
+      }}
+    >
+      <DialogTitle
+        sx={{
+          position: "relative",
+          px: 3,
+          pt: 3,
+          pb: 1.8,
+          pr: 7,
+        }}
+      >
+        <Stack direction="row" alignItems="center" spacing={1.4}>
+          <Avatar
+            variant="rounded"
+            sx={{
+              width: 52,
+              height: 52,
+              borderRadius: "16px",
+              color: theme.palette.app.danger,
+              backgroundColor:
+                theme.palette.mode === "dark"
+                  ? alpha(theme.palette.error.main, 0.14)
+                  : alpha(theme.palette.error.main, 0.1),
+              border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`,
+              flexShrink: 0,
+            }}
+          >
+            <LogoutRoundedIcon sx={{ fontSize: 27 }} />
+          </Avatar>
+
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              sx={{
+                color: theme.palette.app.text,
+                fontSize: "1.35rem",
+                fontWeight: 950,
+                lineHeight: 1.15,
+                letterSpacing: "-0.35px",
+              }}
+            >
+              Cerrar sesión
+            </Typography>
+
+            <Typography
+              sx={{
+                mt: 0.45,
+                color: theme.palette.app.secondary,
+                fontSize: "0.9rem",
+                fontWeight: 650,
+                lineHeight: 1.45,
+              }}
+            >
+              ¿Seguro que querés salir de CodeDesk?
+            </Typography>
+          </Box>
+        </Stack>
+
+        <IconButton
+          onClick={onClose}
+          sx={{
+            position: "absolute",
+            top: 16,
+            right: 16,
+            width: 38,
+            height: 38,
+            borderRadius: "14px",
+            color: theme.palette.app.secondary,
+            backgroundColor:
+              theme.palette.mode === "dark"
+                ? alpha("#FFFFFF", 0.045)
+                : alpha("#0F172A", 0.035),
+            border: `1px solid ${theme.palette.app.borderSoft}`,
+            "&:hover": {
+              color: theme.palette.primary.main,
+              backgroundColor: theme.palette.app.primarySoft,
+            },
+          }}
+        >
+          ×
+        </IconButton>
+      </DialogTitle>
+
+      <DialogContent sx={{ px: 3, pt: 0.4, pb: 2 }}>
+        <Box
+          sx={{
+            borderRadius: "16px",
+            p: 1.6,
+            backgroundColor:
+              theme.palette.mode === "dark"
+                ? alpha("#FFFFFF", 0.035)
+                : alpha("#0F172A", 0.025),
+            border: `1px solid ${theme.palette.app.borderSoft}`,
+          }}
+        >
+          <Typography
+            sx={{
+              color: theme.palette.app.secondary,
+              fontSize: "0.9rem",
+              fontWeight: 650,
+              lineHeight: 1.55,
+            }}
+          >
+            Vas a volver a la pantalla de inicio de sesión. Podés ingresar de
+            nuevo cuando quieras.
+          </Typography>
+        </Box>
+      </DialogContent>
+
+      <DialogActions sx={{ px: 3, pb: 3, pt: 0.5 }}>
+        <Button
+          fullWidth
+          variant="outlined"
+          onClick={onClose}
+          sx={{
+            minHeight: 42,
+            borderRadius: "14px",
+            fontWeight: 900,
+            textTransform: "none",
+          }}
+        >
+          Cancelar
+        </Button>
+
+        <Button
+          fullWidth
+          variant="contained"
+          color="error"
+          startIcon={<LogoutRoundedIcon />}
+          onClick={onConfirm}
+          sx={{
+            minHeight: 42,
+            borderRadius: "14px",
+            fontWeight: 900,
+            textTransform: "none",
+            boxShadow: "none",
+          }}
+        >
+          Salir
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 

@@ -3,7 +3,7 @@ import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Box, CircularProgress } from "@mui/material";
 import Login from "./pages/Login/Login";
-import Dashboard from "./pages/Dashboard";
+import Dashboard from "./pages/Dashboard/Dashboard";
 import { useAuth } from "./context/AuthContext";
 
 // JSX:

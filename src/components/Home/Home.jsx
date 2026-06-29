@@ -1,7 +1,6 @@
 // Importaciones:
 import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
-
 import {
   Avatar,
   Box,
@@ -13,9 +12,7 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-
 import { alpha, useTheme } from "@mui/material/styles";
-
 import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
 import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
 import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
@@ -27,11 +24,11 @@ import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
 import FormatListBulletedRoundedIcon from "@mui/icons-material/FormatListBulletedRounded";
 import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
 import PauseCircleRoundedIcon from "@mui/icons-material/PauseCircleRounded";
-import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
-
+import PaymentsRoundedIcon from "@mui/icons-material/PaymentsRounded";
 import { db } from "../../firebase/firebase";
 import { useAuth } from "../../context/AuthContext";
 
+//JSX:
 // Funciones auxiliares:
 const hexToRgba = (hex, opacity = 1) => {
   const clean = String(hex || "").replace("#", "");
@@ -57,6 +54,22 @@ const hexToRgba = (hex, opacity = 1) => {
 
 const getTaskDateValue = (task) => {
   return task?.createdAt?.seconds || task?.updatedAt?.seconds || 0;
+};
+
+const getPaidAmount = (payment) => {
+  return (payment?.installments || []).reduce((total, installment) => {
+    return total + Number(installment?.amount || 0);
+  }, 0);
+};
+
+const getPaymentStatus = (payment) => {
+  const total = Number(payment?.totalAmount || 0);
+  const paid = getPaidAmount(payment);
+
+  if (total > 0 && paid >= total) return "pagado";
+  if (paid > 0 && paid < total) return "parcial";
+
+  return "no_pagado";
 };
 
 const sortTasksLikeMainList = (a, b) => {
@@ -106,6 +119,12 @@ const getCardStyles = (theme) => ({
       : "0 16px 42px rgba(15, 23, 42, 0.045)",
 });
 
+const getSoftBackground = (theme) => {
+  return theme.palette.mode === "dark"
+    ? alpha("#FFFFFF", 0.035)
+    : alpha("#0F172A", 0.025);
+};
+
 const getProjectLogoBackground = (theme, projectColor) => {
   if (theme.palette.mode === "dark") {
     return alpha("#FFFFFF", 0.94);
@@ -128,17 +147,21 @@ const Home = () => {
 
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [tasksLoaded, setTasksLoaded] = useState(false);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
+  const [paymentsLoaded, setPaymentsLoaded] = useState(false);
 
-  const loading = !tasksLoaded || !projectsLoaded;
+  const loading = !tasksLoaded || !projectsLoaded || !paymentsLoaded;
 
   useEffect(() => {
     if (!user?.uid) {
       setTasks([]);
       setProjects([]);
+      setPayments([]);
       setTasksLoaded(true);
       setProjectsLoaded(true);
+      setPaymentsLoaded(true);
       return;
     }
 
@@ -149,6 +172,11 @@ const Home = () => {
 
     const projectsQuery = query(
       collection(db, "projects"),
+      where("userId", "==", user.uid)
+    );
+
+    const paymentsQuery = query(
+      collection(db, "payments"),
       where("userId", "==", user.uid)
     );
 
@@ -190,19 +218,34 @@ const Home = () => {
       }
     );
 
+    const unsubscribePayments = onSnapshot(
+      paymentsQuery,
+      (snapshot) => {
+        const data = snapshot.docs.map((document) => ({
+          id: document.id,
+          ...document.data(),
+        }));
+
+        setPayments(data);
+        setPaymentsLoaded(true);
+      },
+      (error) => {
+        console.error("Error cargando pagos:", error);
+        setPayments([]);
+        setPaymentsLoaded(true);
+      }
+    );
+
     return () => {
       unsubscribeTasks();
       unsubscribeProjects();
+      unsubscribePayments();
     };
   }, [user]);
 
+  // Proyecto en progreso dinámico: toma el proyecto de la primera tarea de la lista principal.
   const featuredTask = useMemo(() => {
-    return (
-      tasks.find((task) => task.status === "en progreso") ||
-      tasks.find((task) => task.status === "pendiente") ||
-      tasks[0] ||
-      null
-    );
+    return tasks[0] || null;
   }, [tasks]);
 
   const featuredProject = useMemo(() => {
@@ -241,6 +284,23 @@ const Home = () => {
       (project) => project.status === "finalizado"
     ).length;
 
+    const paymentsWithStatus = payments.map((payment) => ({
+      ...payment,
+      paymentStatus: getPaymentStatus(payment),
+    }));
+
+    const unpaidPayments = paymentsWithStatus.filter(
+      (payment) => payment.paymentStatus === "no_pagado"
+    ).length;
+
+    const partialPayments = paymentsWithStatus.filter(
+      (payment) => payment.paymentStatus === "parcial"
+    ).length;
+
+    const paidPayments = paymentsWithStatus.filter(
+      (payment) => payment.paymentStatus === "pagado"
+    ).length;
+
     return {
       totalTasks: tasks.length,
       pendingTasks,
@@ -252,15 +312,15 @@ const Home = () => {
       activeProjects,
       finishedProjects,
       totalProjects: projects.length,
+      unpaidPayments,
+      partialPayments,
+      paidPayments,
+      totalPayments: payments.length,
     };
-  }, [tasks, projects]);
+  }, [tasks, projects, payments]);
 
-  const pendingTasks = useMemo(() => {
-    return tasks.filter((task) => task.status === "pendiente").slice(0, 4);
-  }, [tasks]);
-
-  const inProgressTasks = useMemo(() => {
-    return tasks.filter((task) => task.status === "en progreso").slice(0, 4);
+  const firstTasks = useMemo(() => {
+    return tasks.slice(0, 4);
   }, [tasks]);
 
   return (
@@ -277,11 +337,7 @@ const Home = () => {
           <HomeSkeleton />
         ) : (
           <>
-            <HeaderCard
-              stats={stats}
-              featuredTask={featuredTask}
-              featuredProject={featuredProject}
-            />
+            <HeaderCard />
 
             <OverviewGrid stats={stats} />
 
@@ -290,13 +346,16 @@ const Home = () => {
                 display: "grid",
                 gridTemplateColumns: {
                   xs: "1fr",
-                  lg: "0.95fr 1.05fr",
+                  lg: "1fr 1fr",
                 },
                 gap: { xs: 2, md: 2.4 },
                 alignItems: "stretch",
               }}
             >
-              <ActiveProgressCard stats={stats} />
+              <ProjectInProgressCard
+                task={featuredTask}
+                project={featuredProject}
+              />
 
               <ProjectsResume
                 activeProjects={stats.activeProjects}
@@ -315,20 +374,14 @@ const Home = () => {
                 gap: { xs: 2, md: 2.4 },
               }}
             >
-              <TaskSection
-                title="En progreso"
-                subtitle="Lo que conviene mirar primero"
-                tasks={inProgressTasks}
-                icon={<RocketLaunchRoundedIcon />}
-                color={theme.palette.info.main}
-              />
+              <ActiveProgressCard stats={stats} />
 
               <TaskSection
-                title="Pendientes"
-                subtitle="Tareas que todavía esperan acción"
-                tasks={pendingTasks}
-                icon={<PendingActionsRoundedIcon />}
-                color={theme.palette.warning.main}
+                title="Tareas"
+                subtitle="Estas son tus siguientes tareas según tu orden principal"
+                tasks={firstTasks}
+                icon={<FormatListBulletedRoundedIcon />}
+                color={theme.palette.primary.main}
               />
             </Box>
           </>
@@ -338,7 +391,7 @@ const Home = () => {
   );
 };
 
-const HeaderCard = ({ stats, featuredTask, featuredProject }) => {
+const HeaderCard = () => {
   const theme = useTheme();
 
   return (
@@ -355,238 +408,216 @@ const HeaderCard = ({ stats, featuredTask, featuredProject }) => {
         },
       }}
     >
-      <Stack
-        direction={{ xs: "column", md: "row" }}
-        alignItems={{ xs: "stretch", md: "center" }}
-        justifyContent="space-between"
-        spacing={{ xs: 2.4, md: 3 }}
-      >
-        <Stack direction="row" alignItems="center" spacing={1.6}>
-          <Avatar
-            variant="rounded"
+      <Stack direction="row" alignItems="center" spacing={1.6} sx={{ minWidth: 0 }}>
+        <Avatar
+          variant="rounded"
+          sx={{
+            width: { xs: 52, md: 58 },
+            height: { xs: 52, md: 58 },
+            borderRadius: "18px",
+            color: theme.palette.primary.main,
+            backgroundColor: theme.palette.app.primarySoft,
+            border: `1px solid ${theme.palette.app.borderSoft}`,
+            flexShrink: 0,
+          }}
+        >
+          <HomeRoundedIcon sx={{ fontSize: { xs: 27, md: 31 } }} />
+        </Avatar>
+
+        <Box sx={{ minWidth: 0 }}>
+          <Typography
             sx={{
-              width: { xs: 52, md: 58 },
-              height: { xs: 52, md: 58 },
-              borderRadius: "18px",
-              color: theme.palette.primary.main,
-              backgroundColor: theme.palette.app.primarySoft,
-              border: `1px solid ${theme.palette.app.borderSoft}`,
+              color: theme.palette.app.text,
+              fontWeight: 950,
+              letterSpacing: "-0.6px",
+              fontSize: {
+                xs: "1.55rem",
+                sm: "1.85rem",
+                md: "2.15rem",
+              },
+              lineHeight: 1.05,
             }}
           >
-            <HomeRoundedIcon sx={{ fontSize: { xs: 27, md: 31 } }} />
-          </Avatar>
+            Inicio
+          </Typography>
 
-          <Box sx={{ minWidth: 0 }}>
-            <Chip
-              size="small"
-              icon={<AutoAwesomeRoundedIcon />}
-              label="Resumen general"
-              sx={{
-                height: 27,
-                borderRadius: "999px",
-                color: theme.palette.primary.main,
-                backgroundColor: theme.palette.app.primarySoft,
-                border: `1px solid ${theme.palette.app.borderSoft}`,
-                fontWeight: 850,
-                mb: 0.8,
-                "& .MuiChip-icon": {
-                  color: theme.palette.primary.main,
-                },
-              }}
-            />
-
-            <Typography
-              sx={{
-                color: theme.palette.app.text,
-                fontWeight: 950,
-                letterSpacing: "-0.6px",
-                fontSize: {
-                  xs: "1.55rem",
-                  sm: "1.85rem",
-                  md: "2.15rem",
-                },
-                lineHeight: 1.05,
-              }}
-            >
-              Inicio
-            </Typography>
-
-            <Typography
-              sx={{
-                mt: 0.8,
-                color: theme.palette.app.secondary,
-                fontSize: {
-                  xs: "0.9rem",
-                  md: "0.98rem",
-                },
-                lineHeight: 1.65,
-                fontWeight: 600,
-                maxWidth: 680,
-              }}
-            >
-              Un panel rápido para ver tus tareas activas, proyectos y progreso
-              del espacio de trabajo.
-            </Typography>
-          </Box>
-        </Stack>
-
-        <FeaturedProjectCard
-          task={featuredTask}
-          project={featuredProject}
-          activeTasks={stats.activeTasks}
-        />
+          <Typography
+            sx={{
+              mt: 0.8,
+              color: theme.palette.app.secondary,
+              fontSize: {
+                xs: "0.9rem",
+                md: "0.98rem",
+              },
+              lineHeight: 1.65,
+              fontWeight: 600,
+              maxWidth: 720,
+            }}
+          >
+            Un panel rápido para ver el estado general de tus tareas, proyectos y avance del espacio de trabajo.
+          </Typography>
+        </Box>
       </Stack>
     </Card>
   );
 };
 
-const FeaturedProjectCard = ({ task, project, activeTasks }) => {
+const ProjectInProgressCard = ({ task, project }) => {
   const theme = useTheme();
 
   const projectColor =
     task?.projectColor || project?.color || theme.palette.primary.main;
 
   const logoUrl = task?.projectLogoUrl || project?.logoUrl;
-  const projectName = task?.projectName || project?.name || "Sin proyecto activo";
-  const taskTitle = task?.title || "No hay tareas activas";
-  const letter = projectName?.charAt(0)?.toUpperCase();
-
+  const projectName = task?.projectName || project?.name || "Sin proyecto";
+  const taskTitle = task?.title || "No hay tareas cargadas";
   return (
     <Card
       elevation={0}
       sx={{
-        width: { xs: "100%", md: 315 },
-        flexShrink: 0,
-        borderRadius: "24px",
-        p: 1.6,
-        backgroundColor:
-          theme.palette.mode === "dark"
-            ? alpha("#FFFFFF", 0.035)
-            : alpha("#0F172A", 0.025),
-        border: `1px solid ${theme.palette.app.borderSoft}`,
-        boxShadow: "none",
+        ...getCardStyles(theme),
+        p: { xs: 2, md: 2.4 },
+        height: "100%",
       }}
     >
-      <Stack direction="row" alignItems="center" spacing={1.6}>
-        <Box
-          sx={{
-            width: { xs: 78, md: 92 },
-            height: { xs: 78, md: 92 },
-            borderRadius: "24px",
-            border: `1px solid ${getProjectLogoBorder(theme, projectColor)}`,
-            backgroundColor: getProjectLogoBackground(theme, projectColor),
-            overflow: "hidden",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          {logoUrl ? (
-            <Box
-              component="img"
-              src={logoUrl}
-              alt={projectName}
-              sx={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-              }}
-            />
-          ) : letter ? (
-            <Typography
-              sx={{
-                color: projectColor,
-                fontSize: { xs: "2rem", md: "2.35rem" },
-                fontWeight: 950,
-              }}
-            >
-              {letter}
-            </Typography>
-          ) : (
-            <FolderRoundedIcon
-              sx={{
-                color: projectColor,
-                fontSize: { xs: 34, md: 40 },
-              }}
-            />
-          )}
-        </Box>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        alignItems={{ xs: "stretch", sm: "center" }}
+        spacing={{ xs: 2, md: 2.4 }}
+        sx={{ height: "100%" }}
+      >
+        <ProjectLogo
+          logoUrl={logoUrl}
+          projectName={projectName}
+          projectColor={projectColor}
+          size={{ xs: 124, md: 154 }}
+        />
 
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.7 }}>
-            <Box
+          <Box
+            sx={{
+              minWidth: 0,
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+            }}
+          >
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={1}
+            sx={{ mb: 1, flexWrap: "wrap", rowGap: 1 }}
+          >
+            <Chip
+              size="small"
+              icon={<RocketLaunchRoundedIcon />}
+              label={task ? "Proyecto en progreso" : "Sin tareas activas"}
               sx={{
-                width: 8,
-                height: 8,
+                height: 28,
                 borderRadius: "999px",
-                backgroundColor:
-                  task?.status === "en progreso"
-                    ? theme.palette.info.main
-                    : theme.palette.warning.main,
-                boxShadow: `0 0 0 5px ${alpha(
-                  task?.status === "en progreso"
-                    ? theme.palette.info.main
-                    : theme.palette.warning.main,
-                  0.12
-                )}`,
-                flexShrink: 0,
+                color: task ? theme.palette.info.main : theme.palette.app.secondary,
+                backgroundColor: task
+                  ? alpha(theme.palette.info.main, theme.palette.mode === "dark" ? 0.15 : 0.09)
+                  : getSoftBackground(theme),
+                border: `1px solid ${
+                  task
+                    ? alpha(theme.palette.info.main, 0.18)
+                    : theme.palette.app.borderSoft
+                }`,
+                fontWeight: 900,
+                "& .MuiChip-icon": {
+                  color: task ? theme.palette.info.main : theme.palette.app.secondary,
+                },
               }}
             />
 
-            <Typography
-              noWrap
-              sx={{
-                color: theme.palette.app.secondary,
-                fontSize: "0.76rem",
-                fontWeight: 850,
-              }}
-            >
-              {activeTasks > 0 ? "Proyecto activo" : "Sin tareas activas"}
-            </Typography>
           </Stack>
 
           <Typography
             noWrap
             sx={{
               color: theme.palette.app.text,
-              fontSize: { xs: "1rem", md: "1.08rem" },
               fontWeight: 950,
-              letterSpacing: "-0.25px",
+              fontSize: { xs: "1.35rem", md: "1.65rem" },
+              letterSpacing: "-0.45px",
+              lineHeight: 1.12,
             }}
           >
             {projectName}
           </Typography>
 
           <Typography
-            noWrap
             sx={{
-              mt: 0.35,
+              mt: 0.8,
               color: theme.palette.app.secondary,
-              fontSize: "0.82rem",
-              fontWeight: 650,
+              fontSize: { xs: "0.92rem", md: "0.98rem" },
+              fontWeight: 700,
+              lineHeight: 1.55,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
             }}
           >
-            {taskTitle}
+            Tarea: {taskTitle}
           </Typography>
-
-          <Chip
-            size="small"
-            label={`${activeTasks} activas`}
-            sx={{
-              mt: 1,
-              height: 25,
-              borderRadius: "999px",
-              color: theme.palette.primary.main,
-              backgroundColor: theme.palette.app.primarySoft,
-              border: `1px solid ${theme.palette.app.borderSoft}`,
-              fontWeight: 850,
-              fontSize: "0.7rem",
-            }}
-          />
         </Box>
       </Stack>
     </Card>
+  );
+};
+
+const ProjectLogo = ({ logoUrl, projectName, projectColor, size }) => {
+  const theme = useTheme();
+  const letter = projectName?.charAt(0)?.toUpperCase();
+
+  return (
+    <Box
+      sx={{
+        width: size,
+        height: size,
+        borderRadius: "20px",
+        border: `1px solid ${getProjectLogoBorder(theme, projectColor)}`,
+        backgroundColor: getProjectLogoBackground(theme, projectColor),
+        overflow: "hidden",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        position: "relative",
+      }}
+    >
+      {logoUrl ? (
+        <Box
+          component="img"
+          src={logoUrl}
+          alt={projectName || "Proyecto"}
+          sx={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+          }}
+        />
+      ) : letter ? (
+        <Typography
+          sx={{
+            color: projectColor,
+            fontSize: { xs: "1.85rem", md: "2.1rem" },
+            fontWeight: 950,
+            lineHeight: 1,
+          }}
+        >
+          {letter}
+        </Typography>
+      ) : (
+        <FolderRoundedIcon
+          sx={{
+            color: projectColor,
+            fontSize: { xs: 30, md: 34 },
+          }}
+        />
+      )}
+    </Box>
   );
 };
 
@@ -602,18 +633,18 @@ const OverviewGrid = ({ stats }) => {
       helper: "Pendientes + en progreso",
     },
     {
-      title: "Pendientes",
-      value: stats.pendingTasks,
-      icon: <PendingActionsRoundedIcon />,
-      color: theme.palette.warning.main,
-      helper: "Esperando acción",
-    },
-    {
       title: "En progreso",
       value: stats.inProgressTasks,
       icon: <AccessTimeRoundedIcon />,
       color: theme.palette.info.main,
       helper: "En movimiento",
+    },
+    {
+      title: "Pendientes",
+      value: stats.pendingTasks,
+      icon: <PendingActionsRoundedIcon />,
+      color: theme.palette.warning.main,
+      helper: "Esperando acción",
     },
     {
       title: "Completadas",
@@ -641,7 +672,8 @@ const OverviewGrid = ({ stats }) => {
           elevation={0}
           sx={{
             ...getCardStyles(theme),
-            p: { xs: 1.6, md: 1.9 },
+            minHeight: { xs: 92, md: 104 },
+            p: { xs: 1.55, md: 1.8 },
             borderRadius: "20px",
             transition: "all 0.18s ease",
             "&:hover": {
@@ -650,12 +682,12 @@ const OverviewGrid = ({ stats }) => {
             },
           }}
         >
-          <Stack direction="row" alignItems="center" spacing={1.25}>
+          <Stack direction="row" alignItems="center" spacing={1.25} sx={{ height: "100%" }}>
             <Avatar
               variant="rounded"
               sx={{
-                width: { xs: 40, md: 44 },
-                height: { xs: 40, md: 44 },
+                width: { xs: 40, md: 46 },
+                height: { xs: 40, md: 46 },
                 borderRadius: "15px",
                 color: item.color,
                 backgroundColor: alpha(
@@ -672,7 +704,7 @@ const OverviewGrid = ({ stats }) => {
                 sx={{
                   color: theme.palette.app.text,
                   fontWeight: 950,
-                  fontSize: { xs: "1.45rem", md: "1.75rem" },
+                  fontSize: { xs: "1.45rem", md: "1.78rem" },
                   lineHeight: 1,
                   letterSpacing: "-0.6px",
                 }}
@@ -686,7 +718,7 @@ const OverviewGrid = ({ stats }) => {
                   mt: 0.55,
                   color: theme.palette.app.secondary,
                   fontSize: "0.78rem",
-                  fontWeight: 800,
+                  fontWeight: 850,
                 }}
               >
                 {item.title}
@@ -724,58 +756,88 @@ const ActiveProgressCard = ({ stats }) => {
         height: "100%",
       }}
     >
-      <Stack spacing={2}>
-        <Stack direction="row" alignItems="center" spacing={1.4}>
-          <Avatar
-            variant="rounded"
+      <Stack spacing={2} sx={{ height: "100%" }}>
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          spacing={2}
+        >
+          <Stack direction="row" alignItems="center" spacing={1.4} sx={{ minWidth: 0 }}>
+            <Avatar
+              variant="rounded"
+              sx={{
+                width: 46,
+                height: 46,
+                borderRadius: "16px",
+                color: theme.palette.info.main,
+                backgroundColor: alpha(theme.palette.info.main, 0.12),
+                flexShrink: 0,
+              }}
+            >
+              <TrendingUpRoundedIcon />
+            </Avatar>
+
+            <Box sx={{ minWidth: 0 }}>
+              <Typography
+                sx={{
+                  color: theme.palette.app.text,
+                  fontWeight: 900,
+                  fontSize: "1.05rem",
+                }}
+              >
+                Avance de tareas activas
+              </Typography>
+
+              <Typography
+                noWrap
+                sx={{
+                  mt: 0.25,
+                  color: theme.palette.app.secondary,
+                  fontSize: "0.86rem",
+                  fontWeight: 600,
+                }}
+              >
+                En progreso sobre pendientes + en progreso.
+              </Typography>
+            </Box>
+          </Stack>
+
+          <Typography
             sx={{
-              width: 46,
-              height: 46,
-              borderRadius: "16px",
               color: theme.palette.info.main,
-              backgroundColor: alpha(theme.palette.info.main, 0.12),
+              fontWeight: 950,
+              fontSize: { xs: "2rem", md: "2.35rem" },
+              lineHeight: 1,
+              letterSpacing: "-0.9px",
+              flexShrink: 0,
             }}
           >
-            <TrendingUpRoundedIcon />
-          </Avatar>
-
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
-              sx={{
-                color: theme.palette.app.text,
-                fontWeight: 900,
-                fontSize: "1.05rem",
-              }}
-            >
-              Avance de tareas activas
-            </Typography>
-
-            <Typography
-              sx={{
-                mt: 0.25,
-                color: theme.palette.app.secondary,
-                fontSize: "0.86rem",
-                fontWeight: 600,
-              }}
-            >
-              En progreso sobre pendientes + en progreso.
-            </Typography>
-          </Box>
+            {stats.inProgressPercent}%
+          </Typography>
         </Stack>
 
-        <Box>
+        <Box
+          sx={{
+            borderRadius: "20px",
+            p: { xs: 1.5, md: 1.8 },
+            backgroundColor: getSoftBackground(theme),
+            border: `1px solid ${theme.palette.app.borderSoft}`,
+          }}
+        >
           <Stack
             direction="row"
-            alignItems="flex-end"
+            alignItems="center"
             justifyContent="space-between"
-            sx={{ mb: 0.9 }}
+            spacing={2}
+            sx={{ mb: 1.1 }}
           >
-            <Box>
+            <Box sx={{ minWidth: 0 }}>
               <Typography
                 sx={{
                   color: theme.palette.app.secondary,
                   fontSize: "0.82rem",
-                  fontWeight: 800,
+                  fontWeight: 850,
                 }}
               >
                 En movimiento
@@ -785,67 +847,108 @@ const ActiveProgressCard = ({ stats }) => {
                 sx={{
                   mt: 0.25,
                   color: theme.palette.app.text,
-                  fontSize: "0.82rem",
-                  fontWeight: 700,
+                  fontSize: "0.84rem",
+                  fontWeight: 750,
                 }}
               >
                 {stats.inProgressTasks} en progreso de {stats.activeTasks} activas
               </Typography>
             </Box>
-
-            <Typography
-              sx={{
-                color: theme.palette.info.main,
-                fontWeight: 950,
-                fontSize: "2rem",
-                lineHeight: 1,
-                letterSpacing: "-0.8px",
-              }}
-            >
-              {stats.inProgressPercent}%
-            </Typography>
           </Stack>
 
-          <LinearProgress
-            variant="determinate"
-            value={stats.inProgressPercent}
-            sx={{
-              height: 10,
-              borderRadius: "999px",
-              backgroundColor:
-                theme.palette.mode === "dark"
-                  ? alpha("#FFFFFF", 0.08)
-                  : alpha("#0F172A", 0.08),
-              "& .MuiLinearProgress-bar": {
+          <Box sx={{ px: { xs: 0.4, md: 0.8} }}>
+            <LinearProgress
+              variant="determinate"
+              value={stats.inProgressPercent}
+              sx={{
+                height: 10,
                 borderRadius: "999px",
-              },
+                backgroundColor:
+                  theme.palette.mode === "dark"
+                    ? alpha("#FFFFFF", 0.08)
+                    : alpha("#0F172A", 0.08),
+                "& .MuiLinearProgress-bar": {
+                  borderRadius: "999px",
+                },
+              }}
+            />
+          </Box>
+        </Box>
+        <Box sx={{ mt: 0.5 }}>
+          <Typography
+            sx={{
+              color: theme.palette.app.text,
+              fontSize: "0.95rem",
+              fontWeight: 900,
+              mt:2
             }}
+          >
+            Resumen de cobros
+          </Typography>
+
+          <Typography
+            sx={{
+              mt: 0.25,
+              color: theme.palette.app.secondary,
+              fontSize: "0.8rem",
+              fontWeight: 600,
+            }}
+          >
+            Estado pendiente de tus proyectos facturados.
+          </Typography>
+        </Box>
+        <Box
+          sx={{
+            mt: "auto",
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(3, 1fr)" },
+            gap: 1.2,
+          }}
+        >
+          <ProjectMiniStat
+            title="Activas"
+            value={stats.activeTasks}
+            icon={<FormatListBulletedRoundedIcon />}
+            color={theme.palette.primary.main}
+          />
+
+          <ProjectMiniStat
+            title="En progreso"
+            value={stats.inProgressTasks}
+            icon={<AccessTimeRoundedIcon />}
+            color={theme.palette.info.main}
+          />
+
+          <ProjectMiniStat
+            title="Pendientes"
+            value={stats.pendingTasks}
+            icon={<PendingActionsRoundedIcon />}
+            color={theme.palette.warning.main}
           />
         </Box>
 
         <Box
           sx={{
-            borderRadius: "18px",
-            px: 1.6,
-            py: 1.25,
-            backgroundColor:
-              theme.palette.mode === "dark"
-                ? alpha("#FFFFFF", 0.035)
-                : alpha("#0F172A", 0.025),
-            border: `1px solid ${theme.palette.app.borderSoft}`,
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+            gap: 1.2,
           }}
         >
-          <Typography
-            sx={{
-              color: theme.palette.app.secondary,
-              fontSize: "0.84rem",
-              lineHeight: 1.55,
-              fontWeight: 600,
-            }}
-          >
-            Las completadas y pausadas quedan fuera de este cálculo para mostrar
-            solo lo que todavía requiere acción.
-          </Typography>
+          <PaymentMiniStat
+            title="Sin cobrar"
+            value={stats.unpaidPayments}
+            helper="Pagos todavía pendientes"
+            icon={<PaymentsRoundedIcon />}
+            color={theme.palette.warning.main}
+          />
+
+          <PaymentMiniStat
+            title="Parciales"
+            value={stats.partialPayments}
+            helper="Cobros iniciados"
+            icon={<AccessTimeRoundedIcon />}
+            color={theme.palette.info.main}
+          />
         </Box>
       </Stack>
     </Card>
@@ -864,9 +967,9 @@ const ProjectsResume = ({ activeProjects, finishedProjects, totalProjects }) => 
         height: "100%",
       }}
     >
-      <Stack spacing={2}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between">
-          <Stack direction="row" alignItems="center" spacing={1.4}>
+      <Stack spacing={2} sx={{ height: "100%" }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+          <Stack direction="row" alignItems="center" spacing={1.4} sx={{ minWidth: 0 }}>
             <Avatar
               variant="rounded"
               sx={{
@@ -875,12 +978,13 @@ const ProjectsResume = ({ activeProjects, finishedProjects, totalProjects }) => 
                 borderRadius: "16px",
                 color: theme.palette.primary.main,
                 backgroundColor: theme.palette.app.primarySoft,
+                flexShrink: 0,
               }}
             >
               <FolderRoundedIcon />
             </Avatar>
 
-            <Box>
+            <Box sx={{ minWidth: 0 }}>
               <Typography
                 sx={{
                   color: theme.palette.app.text,
@@ -892,6 +996,7 @@ const ProjectsResume = ({ activeProjects, finishedProjects, totalProjects }) => 
               </Typography>
 
               <Typography
+                noWrap
                 sx={{
                   mt: 0.25,
                   color: theme.palette.app.secondary,
@@ -899,22 +1004,10 @@ const ProjectsResume = ({ activeProjects, finishedProjects, totalProjects }) => 
                   fontWeight: 600,
                 }}
               >
-                Estado general de tus proyectos.
+                Estado general del espacio de trabajo.
               </Typography>
             </Box>
           </Stack>
-
-          <Chip
-            label={`${totalProjects} total`}
-            sx={{
-              height: 28,
-              borderRadius: "999px",
-              color: theme.palette.primary.main,
-              backgroundColor: theme.palette.app.primarySoft,
-              border: `1px solid ${theme.palette.app.borderSoft}`,
-              fontWeight: 850,
-            }}
-          />
         </Stack>
 
         <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
@@ -922,10 +1015,18 @@ const ProjectsResume = ({ activeProjects, finishedProjects, totalProjects }) => 
         <Box
           sx={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 1.4,
+            gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
+            gap: 1.2,
+            mt: "auto",
           }}
         >
+          <ProjectMiniStat
+            title="Total"
+            value={totalProjects}
+            icon={<FolderRoundedIcon />}
+            color={theme.palette.primary.main}
+          />
+
           <ProjectMiniStat
             title="Activos"
             value={activeProjects}
@@ -952,15 +1053,15 @@ const ProjectMiniStat = ({ title, value, icon, color }) => {
     <Box
       sx={{
         borderRadius: "18px",
-        p: 1.45,
-        backgroundColor:
-          theme.palette.mode === "dark"
-            ? alpha("#FFFFFF", 0.035)
-            : alpha("#0F172A", 0.025),
+        p: 1.35,
+        backgroundColor: getSoftBackground(theme),
         border: `1px solid ${theme.palette.app.borderSoft}`,
+        minHeight: 74,
+        display: "flex",
+        alignItems: "center",
       }}
     >
-      <Stack direction="row" alignItems="center" spacing={1.2}>
+      <Stack direction="row" alignItems="center" spacing={1.15} sx={{ width: "100%" }}>
         <Avatar
           variant="rounded"
           sx={{
@@ -972,16 +1073,17 @@ const ProjectMiniStat = ({ title, value, icon, color }) => {
               color,
               theme.palette.mode === "dark" ? 0.16 : 0.1
             ),
+            flexShrink: 0,
           }}
         >
           {icon}
         </Avatar>
 
-        <Box>
+        <Box sx={{ minWidth: 0 }}>
           <Typography
             sx={{
               color: theme.palette.app.text,
-              fontSize: { xs: "1.45rem", md: "1.65rem" },
+              fontSize: { xs: "1.35rem", md: "1.55rem" },
               lineHeight: 1,
               fontWeight: 950,
               letterSpacing: "-0.6px",
@@ -991,6 +1093,7 @@ const ProjectMiniStat = ({ title, value, icon, color }) => {
           </Typography>
 
           <Typography
+            noWrap
             sx={{
               mt: 0.45,
               color: theme.palette.app.secondary,
@@ -999,6 +1102,81 @@ const ProjectMiniStat = ({ title, value, icon, color }) => {
             }}
           >
             {title}
+          </Typography>
+        </Box>
+      </Stack>
+    </Box>
+  );
+};
+
+const PaymentMiniStat = ({ title, value, helper, icon, color }) => {
+  const theme = useTheme();
+
+  return (
+    <Box
+      sx={{
+        borderRadius: "18px",
+        p: 1.35,
+        backgroundColor: getSoftBackground(theme),
+        border: `1px solid ${theme.palette.app.borderSoft}`,
+        minHeight: 78,
+        display: "flex",
+        alignItems: "center",
+      }}
+    >
+      <Stack direction="row" alignItems="center" spacing={1.15} sx={{ width: "100%" }}>
+        <Avatar
+          variant="rounded"
+          sx={{
+            width: 39,
+            height: 39,
+            borderRadius: "14px",
+            color,
+            backgroundColor: alpha(
+              color,
+              theme.palette.mode === "dark" ? 0.16 : 0.1
+            ),
+            flexShrink: 0,
+          }}
+        >
+          {icon}
+        </Avatar>
+
+        <Box sx={{ minWidth: 0 }}>
+          <Typography
+            sx={{
+              color: theme.palette.app.text,
+              fontSize: { xs: "1.28rem", md: "1.45rem" },
+              lineHeight: 1,
+              fontWeight: 950,
+              letterSpacing: "-0.6px",
+            }}
+          >
+            {value}
+          </Typography>
+
+          <Typography
+            noWrap
+            sx={{
+              mt: 0.4,
+              color: theme.palette.app.secondary,
+              fontSize: "0.76rem",
+              fontWeight: 850,
+            }}
+          >
+            {title}
+          </Typography>
+
+          <Typography
+            noWrap
+            sx={{
+              mt: 0.2,
+              color: theme.palette.app.muted,
+              fontSize: "0.7rem",
+              fontWeight: 650,
+            }}
+          >
+            {helper}
           </Typography>
         </Box>
       </Stack>
@@ -1064,22 +1242,6 @@ const TaskSection = ({ title, subtitle, tasks, icon, color }) => {
               </Typography>
             </Box>
           </Stack>
-
-          <Chip
-            size="small"
-            label={`${tasks.length}`}
-            sx={{
-              height: 28,
-              minWidth: 38,
-              borderRadius: "999px",
-              fontWeight: 900,
-              color,
-              backgroundColor: alpha(
-                color,
-                theme.palette.mode === "dark" ? 0.15 : 0.09
-              ),
-            }}
-          />
         </Stack>
       </Box>
 
@@ -1088,18 +1250,8 @@ const TaskSection = ({ title, subtitle, tasks, icon, color }) => {
       <Box sx={{ p: { xs: 1.2, md: 1.5 } }}>
         {tasks.length === 0 ? (
           <EmptyCard
-            text={
-              title === "En progreso"
-                ? "No tenés tareas en progreso."
-                : "No tenés tareas pendientes."
-            }
-            icon={
-              title === "En progreso" ? (
-                <AccessTimeRoundedIcon />
-              ) : (
-                <TaskAltRoundedIcon />
-              )
-            }
+            text="No hay tareas para mostrar."
+            icon={<TaskAltRoundedIcon />}
             color={color}
           />
         ) : (
@@ -1371,14 +1523,14 @@ const HomeSkeleton = () => {
           display: "grid",
           gridTemplateColumns: {
             xs: "1fr",
-            lg: "0.95fr 1.05fr",
+            lg: "1fr 1fr",
           },
           gap: { xs: 2, md: 2.4 },
         }}
       >
         <Skeleton
           variant="rounded"
-          height={210}
+          height={240}
           sx={{
             borderRadius: "24px",
             backgroundColor:
@@ -1390,7 +1542,7 @@ const HomeSkeleton = () => {
 
         <Skeleton
           variant="rounded"
-          height={210}
+          height={240}
           sx={{
             borderRadius: "24px",
             backgroundColor:

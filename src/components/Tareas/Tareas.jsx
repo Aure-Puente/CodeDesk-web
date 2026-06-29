@@ -478,7 +478,6 @@ const Tareas = () => {
         <PageHeader
           stats={stats}
           projectsCount={projects.length}
-          featuredTask={featuredTask}
           onCreate={openCreateDialog}
         />
 
@@ -566,7 +565,7 @@ const Tareas = () => {
   );
 };
 
-const PageHeader = ({ stats, projectsCount, featuredTask, onCreate }) => {
+const PageHeader = ({ stats, projectsCount, onCreate }) => {
   const theme = useTheme();
 
   return (
@@ -664,7 +663,6 @@ const PageHeader = ({ stats, projectsCount, featuredTask, onCreate }) => {
             ml: { xs: 0, lg: "auto" },
           }}
         >
-          <FeaturedTaskCard task={featuredTask} />
 
           <Button
             variant="contained"

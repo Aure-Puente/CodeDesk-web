@@ -1,3 +1,4 @@
+//Importaciones:
 import { useEffect, useMemo, useState } from "react";
 import {
   addDoc,
@@ -10,7 +11,6 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -38,7 +38,6 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Collapse from "@mui/material/Collapse";
 import Badge from "@mui/material/Badge";
 import { alpha, useTheme } from "@mui/material/styles";
-
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
@@ -66,10 +65,10 @@ import SavingsRoundedIcon from "@mui/icons-material/SavingsRounded";
 import PaidRoundedIcon from "@mui/icons-material/PaidRounded";
 import CreditScoreRoundedIcon from "@mui/icons-material/CreditScoreRounded";
 import BusinessCenterRoundedIcon from "@mui/icons-material/BusinessCenterRounded";
-
 import { db } from "../../firebase/firebase";
 import { useAuth } from "../../context/AuthContext";
 
+//JSX:
 const FILTERS = ["todos", "no_pagado", "parcial", "pagado"];
 
 const CURRENCIES = [
@@ -145,6 +144,13 @@ function getStatusColor(theme, status) {
   if (status === "parcial") return theme.palette.warning.main;
   if (status === "pagado") return theme.palette.success.main;
   return theme.palette.error.main;
+}
+
+function getPaymentStatusOrder(status) {
+  if (status === "no_pagado") return 1;
+  if (status === "parcial") return 2;
+  if (status === "pagado") return 3;
+  return 4;
 }
 
 function getProgressColor(theme, status) {
@@ -316,11 +322,24 @@ export default function Pagos() {
   }, [payments]);
 
   const filteredPayments = useMemo(() => {
-    if (filter === "todos") return paymentsWithStatus;
+    const visiblePayments =
+      filter === "todos"
+        ? paymentsWithStatus
+        : paymentsWithStatus.filter(
+            (payment) => payment.paymentStatus === filter
+          );
 
-    return paymentsWithStatus.filter(
-      (payment) => payment.paymentStatus === filter
-    );
+    return [...visiblePayments].sort((a, b) => {
+      const statusA = getPaymentStatusOrder(a.paymentStatus);
+      const statusB = getPaymentStatusOrder(b.paymentStatus);
+
+      if (statusA !== statusB) return statusA - statusB;
+
+      const dateA = a.createdAt?.seconds || 0;
+      const dateB = b.createdAt?.seconds || 0;
+
+      return dateB - dateA;
+    });
   }, [paymentsWithStatus, filter]);
 
   const summary = useMemo(() => {
@@ -640,7 +659,7 @@ export default function Pagos() {
           <Alert
             severity="error"
             sx={{
-              borderRadius: 3,
+              borderRadius: "14px",
               border: "1px solid",
               borderColor: alpha(theme.palette.error.main, 0.2),
               fontWeight: 700,
@@ -1020,8 +1039,9 @@ function SummaryGrid({ summary, formatMoney, overallProgress }) {
         sx={{
           gridColumn: "1 / -1",
           ...getGlassCardStyles(theme),
-          borderRadius: 3.5,
-          p: { xs: 1.8, md: 2.2 },
+          borderRadius: "16px",
+          px: { xs: 2.2, md: 2.6 },
+          py: { xs: 1.9, md: 2.25 },
           boxShadow: "none",
         }}
       >
@@ -1029,9 +1049,10 @@ function SummaryGrid({ summary, formatMoney, overallProgress }) {
           direction={{ xs: "column", md: "row" }}
           alignItems={{ xs: "stretch", md: "center" }}
           justifyContent="space-between"
-          spacing={1.5}
+          spacing={{ xs: 1.6, md: 3 }}
+          sx={{ width: "100%" }}
         >
-          <Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography sx={{ fontWeight: 950 }}>
               Avance general de cobros
             </Typography>
@@ -1044,18 +1065,35 @@ function SummaryGrid({ summary, formatMoney, overallProgress }) {
             </Typography>
           </Box>
 
-          <Box sx={{ width: { xs: "100%", md: 380 } }}>
+          <Box
+            sx={{
+              width: { xs: "100%", md: 430 },
+              ml: { xs: 0, md: "auto" },
+              flexShrink: 0,
+            }}
+          >
             <Stack
               direction="row"
               alignItems="center"
               justifyContent="space-between"
-              sx={{ mb: 0.7 }}
+              sx={{
+                mb: 0.7,
+                width: "100%",
+                gap: 1.2,
+              }}
             >
               <Typography color="text.secondary" sx={{ fontSize: 12, fontWeight: 850 }}>
                 Progreso
               </Typography>
 
-              <Typography sx={{ fontSize: 12, fontWeight: 950 }}>
+              <Typography
+                sx={{
+                  fontSize: 12,
+                  fontWeight: 950,
+                  minWidth: 42,
+                  textAlign: "right",
+                }}
+              >
                 {overallProgress}%
               </Typography>
             </Stack>
@@ -1090,7 +1128,7 @@ function SummaryCard({ title, value, icon, color }) {
       variant="outlined"
       sx={{
         ...getGlassCardStyles(theme),
-        borderRadius: 3.5,
+        borderRadius: "16px",
         p: { xs: 1.7, md: 2 },
         boxShadow: "none",
         transition: "0.2s ease",
@@ -1106,7 +1144,7 @@ function SummaryCard({ title, value, icon, color }) {
           sx={{
             width: { xs: 44, md: 50 },
             height: { xs: 44, md: 50 },
-            borderRadius: 2.2,
+            borderRadius: "12px",
             bgcolor: alpha(color, theme.palette.mode === "dark" ? 0.16 : 0.1),
             color,
           }}
@@ -1151,7 +1189,7 @@ function FilterPanel({ filter, setFilter, filteredCount, totalCount }) {
       variant="outlined"
       sx={{
         ...getGlassCardStyles(theme),
-        borderRadius: 3.5,
+        borderRadius: "16px",
         p: { xs: 1.6, md: 2 },
         boxShadow: "none",
       }}
@@ -1168,7 +1206,7 @@ function FilterPanel({ filter, setFilter, filteredCount, totalCount }) {
             sx={{
               width: 40,
               height: 40,
-              borderRadius: 2,
+              borderRadius: "10px",
               color: "primary.main",
               bgcolor: alpha(theme.palette.primary.main, 0.1),
             }}
@@ -1282,7 +1320,7 @@ function PaymentCard({
       variant="outlined"
       sx={{
         position: "relative",
-        borderRadius: 4,
+        borderRadius: "18px",
         bgcolor:
           theme.palette.mode === "dark"
             ? alpha(theme.palette.background.paper, 0.84)
@@ -1308,39 +1346,12 @@ function PaymentCard({
       }}
     >
       <Box
-        aria-hidden
-        sx={{
-          position: "absolute",
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: 6,
-          bgcolor: statusColor,
-        }}
-      />
-
-      <Box
-        aria-hidden
-        sx={{
-          position: "absolute",
-          right: -70,
-          top: -90,
-          width: 220,
-          height: 220,
-          borderRadius: "50%",
-          bgcolor: alpha(statusColor, theme.palette.mode === "dark" ? 0.09 : 0.06),
-          filter: "blur(10px)",
-        }}
-      />
-
-      <Box
         onClick={onToggleExpanded}
         sx={{
           position: "relative",
           cursor: "pointer",
-          p: { xs: 2, md: 2.5 },
-          pl: { xs: 2.4, md: 3 },
-          pb: 1.8,
+          p: { xs: 1.7, md: 2.1 },
+          pb: 1.5,
         }}
       >
         <Stack
@@ -1452,23 +1463,24 @@ function PaymentCard({
           </Stack>
         </Stack>
 
-        <LinearProgress
-          variant="determinate"
-          value={progressPercent}
-          sx={{
-            mt: 2,
-            height: 10,
-            borderRadius: 999,
-            bgcolor:
-              theme.palette.mode === "dark"
-                ? alpha("#FFFFFF", 0.08)
-                : alpha("#0F172A", 0.08),
-            "& .MuiLinearProgress-bar": {
+        <Box sx={{ mt: 2, px: { xs: 1, md: 1.5 } }}>
+          <LinearProgress
+            variant="determinate"
+            value={progressPercent}
+            sx={{
+              height: 10,
               borderRadius: 999,
-              bgcolor: getProgressColor(theme, payment.paymentStatus),
-            },
-          }}
-        />
+              bgcolor:
+                theme.palette.mode === "dark"
+                  ? alpha("#FFFFFF", 0.08)
+                  : alpha("#0F172A", 0.08),
+              "& .MuiLinearProgress-bar": {
+                borderRadius: 999,
+                bgcolor: getProgressColor(theme, payment.paymentStatus),
+              },
+            }}
+          />
+        </Box>
       </Box>
 
       <Collapse in={expanded} timeout="auto" unmountOnExit>
@@ -1476,7 +1488,6 @@ function PaymentCard({
           sx={{
             position: "relative",
             px: { xs: 2, md: 2.5 },
-            pl: { xs: 2.4, md: 3 },
             pb: { xs: 2, md: 2.5 },
           }}
         >
@@ -1485,7 +1496,7 @@ function PaymentCard({
             alignItems="center"
             spacing={1.4}
             sx={{
-              borderRadius: 3,
+              borderRadius: "14px",
               bgcolor:
                 theme.palette.mode === "dark"
                   ? alpha("#FFFFFF", 0.04)
@@ -1504,7 +1515,7 @@ function PaymentCard({
               sx={{
                 width: 42,
                 height: 42,
-                borderRadius: 2,
+                borderRadius: "10px",
                 bgcolor: alpha(projectColor, theme.palette.mode === "dark" ? 0.16 : 0.1),
                 color: projectColor,
               }}
@@ -1554,7 +1565,7 @@ function PaymentCard({
               spacing={1.2}
               sx={{
                 mt: 2,
-                borderRadius: 3,
+                borderRadius: "14px",
                 border: "1px solid",
                 borderColor:
                   theme.palette.mode === "dark"
@@ -1603,7 +1614,7 @@ function PaymentCard({
             <Card
               variant="outlined"
               sx={{
-                borderRadius: 3,
+                borderRadius: "14px",
                 bgcolor:
                   theme.palette.mode === "dark"
                     ? alpha("#FFFFFF", 0.035)
@@ -1621,7 +1632,7 @@ function PaymentCard({
                   sx={{
                     width: 42,
                     height: 42,
-                    borderRadius: 2,
+                    borderRadius: "10px",
                     color: "text.secondary",
                     bgcolor:
                       theme.palette.mode === "dark"
@@ -1659,6 +1670,7 @@ function PaymentCard({
             alignItems={{ xs: "stretch", sm: "center" }}
             justifyContent="space-between"
             spacing={1.5}
+            sx={{marginLeft: 2}}
           >
             <Button
               variant="outlined"
@@ -1737,7 +1749,7 @@ function ProjectIcon({ payment }) {
         width: { xs: 52, md: 64 },
         height: { xs: 52, md: 64 },
         flexShrink: 0,
-        borderRadius: 2.7,
+        borderRadius: "12px",
         border: "1px solid",
         borderColor: getProjectIconBorder(theme, projectColor),
         bgcolor: getProjectIconBackground(theme, projectColor),
@@ -1784,7 +1796,7 @@ function AmountBox({ title, value, icon, color }) {
     <Card
       variant="outlined"
       sx={{
-        borderRadius: 3,
+        borderRadius: "14px",
         bgcolor:
           theme.palette.mode === "dark"
             ? alpha("#FFFFFF", 0.035)
@@ -1802,7 +1814,7 @@ function AmountBox({ title, value, icon, color }) {
           sx={{
             width: 44,
             height: 44,
-            borderRadius: 2.1,
+            borderRadius: "11px",
             bgcolor: alpha(color, theme.palette.mode === "dark" ? 0.16 : 0.1),
             color,
           }}
@@ -1852,7 +1864,7 @@ function InstallmentItem({
     <Card
       variant="outlined"
       sx={{
-        borderRadius: 3,
+        borderRadius: "14px",
         bgcolor:
           theme.palette.mode === "dark"
             ? alpha("#FFFFFF", 0.035)
@@ -1870,7 +1882,7 @@ function InstallmentItem({
           sx={{
             width: 43,
             height: 43,
-            borderRadius: 2.1,
+            borderRadius: "11px",
             bgcolor: alpha(theme.palette.success.main, 0.12),
             color: "success.main",
           }}
@@ -1979,7 +1991,7 @@ function EmptyState({ onCreate }) {
       variant="outlined"
       sx={{
         ...getGlassCardStyles(theme),
-        borderRadius: 4,
+        borderRadius: "18px",
         overflow: "hidden",
         boxShadow: "none",
       }}
@@ -1990,7 +2002,7 @@ function EmptyState({ onCreate }) {
           sx={{
             width: { xs: 68, md: 82 },
             height: { xs: 68, md: 82 },
-            borderRadius: 3.2,
+            borderRadius: "15px",
             bgcolor: alpha(theme.palette.primary.main, 0.1),
             color: "primary.main",
             mb: 2.2,
@@ -2034,7 +2046,7 @@ function EmptyState({ onCreate }) {
           sx={{
             minHeight: 48,
             px: 2.6,
-            borderRadius: 2.8,
+            borderRadius: "12px",
             fontWeight: 950,
             textTransform: "none",
           }}
@@ -2100,7 +2112,7 @@ function PaymentFormDialog({
                 sx={{
                   width: 52,
                   height: 52,
-                  borderRadius: 2.5,
+                  borderRadius: "12px",
                   color: "primary.main",
                   bgcolor: alpha(theme.palette.primary.main, 0.1),
                   border: "1px solid",
@@ -2153,13 +2165,13 @@ function PaymentFormDialog({
         <DialogContent sx={{ px: { xs: 2.2, md: 3 }, py: { xs: 2.4, md: 3 } }}>
           <Stack spacing={2.4}>
             {pageError ? (
-              <Alert severity="error" sx={{ borderRadius: 3, fontWeight: 700 }}>
+              <Alert severity="error" sx={{ borderRadius: "14px", fontWeight: 700 }}>
                 {pageError}
               </Alert>
             ) : null}
 
             {projects.length === 0 ? (
-              <Alert severity="warning" sx={{ borderRadius: 3, fontWeight: 700 }}>
+              <Alert severity="warning" sx={{ borderRadius: "14px", fontWeight: 700 }}>
                 Primero necesitás crear un proyecto para poder cargar pagos.
               </Alert>
             ) : (
@@ -2174,20 +2186,41 @@ function PaymentFormDialog({
                 >
                   {projects.map((project) => (
                     <MenuItem key={project.id} value={project.id}>
-                      <Stack direction="row" alignItems="center" spacing={1.2}>
+                      <Stack
+                        direction="row"
+                        alignItems="center"
+                        spacing={1.2}
+                        sx={{
+                          width: "100%",
+                          minHeight: 28,
+                        }}
+                      >
                         <Box
                           sx={{
-                            width: 12,
-                            height: 12,
+                            width: 11,
+                            height: 11,
                             borderRadius: 999,
-                            bgcolor: project.color || "primary.main",
+                            bgcolor: project.color || theme.palette.primary.main,
                             boxShadow: `0 0 0 4px ${alpha(
                               project.color || theme.palette.primary.main,
                               0.1
                             )}`,
+                            flexShrink: 0,
+                            alignSelf: "center",
+                            transform: "translateY(0px)",
                           }}
                         />
-                        <span>{project.name}</span>
+
+                        <Typography
+                          component="span"
+                          noWrap
+                          sx={{
+                            lineHeight: 1.2,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {project.name}
+                        </Typography>
                       </Stack>
                     </MenuItem>
                   ))}
@@ -2201,7 +2234,7 @@ function PaymentFormDialog({
                 alignItems="center"
                 spacing={1.3}
                 sx={{
-                  borderRadius: 3,
+                  borderRadius: "14px",
                   border: "1px solid",
                   borderColor:
                     theme.palette.mode === "dark"
@@ -2252,7 +2285,7 @@ function PaymentFormDialog({
                       theme.palette.mode === "dark"
                         ? `${alpha("#FFFFFF", 0.09)} !important`
                         : `${alpha("#0F172A", 0.08)} !important`,
-                    borderRadius: "18px !important",
+                    borderRadius: "14px !important",
                   },
                   "& .MuiToggleButton-root": {
                     py: 1.35,
@@ -2319,7 +2352,7 @@ function PaymentFormDialog({
               disabled={saving}
               sx={{
                 "& .MuiOutlinedInput-root": {
-                  borderRadius: 2.8,
+                  borderRadius: "12px",
                 },
               }}
             />
@@ -2334,7 +2367,7 @@ function PaymentFormDialog({
               disabled={saving}
               sx={{
                 "& .MuiOutlinedInput-root": {
-                  borderRadius: 2.8,
+                  borderRadius: "12px",
                 },
               }}
             />
@@ -2350,7 +2383,7 @@ function PaymentFormDialog({
             sx={{
               textTransform: "none",
               fontWeight: 850,
-              borderRadius: 2.4,
+              borderRadius: "12px",
             }}
           >
             Cancelar
@@ -2364,7 +2397,7 @@ function PaymentFormDialog({
             sx={{
               minHeight: 45,
               px: 2.4,
-              borderRadius: 2.5,
+              borderRadius: "12px",
               fontWeight: 950,
               textTransform: "none",
             }}
@@ -2392,7 +2425,7 @@ function ProjectPreviewIcon({ project }) {
         width: 48,
         height: 48,
         flexShrink: 0,
-        borderRadius: 2.2,
+        borderRadius: "12px",
         border: "1px solid",
         borderColor: getProjectIconBorder(theme, projectColor),
         bgcolor: getProjectIconBackground(theme, projectColor),
@@ -2481,7 +2514,7 @@ function InstallmentFormDialog({
                 sx={{
                   width: 52,
                   height: 52,
-                  borderRadius: 2.5,
+                  borderRadius: "12px",
                   color: "success.main",
                   bgcolor: alpha(theme.palette.success.main, 0.1),
                   border: "1px solid",
@@ -2534,7 +2567,7 @@ function InstallmentFormDialog({
         <DialogContent sx={{ px: { xs: 2.2, md: 3 }, py: { xs: 2.4, md: 3 } }}>
           <Stack spacing={2.4}>
             {pageError ? (
-              <Alert severity="error" sx={{ borderRadius: 3, fontWeight: 700 }}>
+              <Alert severity="error" sx={{ borderRadius: "14px", fontWeight: 700 }}>
                 {pageError}
               </Alert>
             ) : null}
@@ -2543,7 +2576,7 @@ function InstallmentFormDialog({
               severity="info"
               icon={currencyInfo.icon}
               sx={{
-                borderRadius: 3,
+                borderRadius: "14px",
                 fontWeight: 700,
               }}
             >
@@ -2559,7 +2592,7 @@ function InstallmentFormDialog({
               disabled={saving}
               sx={{
                 "& .MuiOutlinedInput-root": {
-                  borderRadius: 2.8,
+                  borderRadius: "12px",
                 },
               }}
             />
@@ -2622,7 +2655,7 @@ function InstallmentFormDialog({
               disabled={saving}
               sx={{
                 "& .MuiOutlinedInput-root": {
-                  borderRadius: 2.8,
+                  borderRadius: "12px",
                 },
               }}
             />
@@ -2638,7 +2671,7 @@ function InstallmentFormDialog({
             sx={{
               textTransform: "none",
               fontWeight: 850,
-              borderRadius: 2.4,
+              borderRadius: "12px",
             }}
           >
             Cancelar
@@ -2652,7 +2685,7 @@ function InstallmentFormDialog({
             sx={{
               minHeight: 45,
               px: 2.4,
-              borderRadius: 2.5,
+              borderRadius: "12px",
               fontWeight: 950,
               textTransform: "none",
             }}
@@ -2843,7 +2876,7 @@ function SummarySkeleton() {
         height={94}
         sx={{
           gridColumn: "1 / -1",
-          borderRadius: 3.5,
+          borderRadius: "16px",
         }}
       />
     </Box>
@@ -2860,7 +2893,7 @@ function PaymentsSkeleton() {
           key={item}
           variant="outlined"
           sx={{
-            borderRadius: 4,
+            borderRadius: "18px",
             bgcolor: "background.paper",
             borderColor:
               theme.palette.mode === "dark"
