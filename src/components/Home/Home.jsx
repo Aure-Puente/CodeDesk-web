@@ -7,7 +7,6 @@ import {
   Card,
   Chip,
   Divider,
-  LinearProgress,
   Skeleton,
   Stack,
   Typography,
@@ -22,9 +21,9 @@ import PendingActionsRoundedIcon from "@mui/icons-material/PendingActionsRounded
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
 import FormatListBulletedRoundedIcon from "@mui/icons-material/FormatListBulletedRounded";
-import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
 import PauseCircleRoundedIcon from "@mui/icons-material/PauseCircleRounded";
 import PaymentsRoundedIcon from "@mui/icons-material/PaymentsRounded";
+import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
 import { db } from "../../firebase/firebase";
 import { useAuth } from "../../context/AuthContext";
 
@@ -148,20 +147,24 @@ const Home = () => {
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [notes, setNotes] = useState([]);
   const [tasksLoaded, setTasksLoaded] = useState(false);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [paymentsLoaded, setPaymentsLoaded] = useState(false);
+  const [notesLoaded, setNotesLoaded] = useState(false);
 
-  const loading = !tasksLoaded || !projectsLoaded || !paymentsLoaded;
+  const loading = !tasksLoaded || !projectsLoaded || !paymentsLoaded || !notesLoaded;
 
   useEffect(() => {
     if (!user?.uid) {
       setTasks([]);
       setProjects([]);
       setPayments([]);
+      setNotes([]);
       setTasksLoaded(true);
       setProjectsLoaded(true);
       setPaymentsLoaded(true);
+      setNotesLoaded(true);
       return;
     }
 
@@ -177,6 +180,11 @@ const Home = () => {
 
     const paymentsQuery = query(
       collection(db, "payments"),
+      where("userId", "==", user.uid)
+    );
+
+    const notesQuery = query(
+      collection(db, "notes"),
       where("userId", "==", user.uid)
     );
 
@@ -236,10 +244,31 @@ const Home = () => {
       }
     );
 
+    const unsubscribeNotes = onSnapshot(
+      notesQuery,
+      (snapshot) => {
+        const data = snapshot.docs
+          .map((document) => ({
+            id: document.id,
+            ...document.data(),
+          }))
+          .sort(sortTasksLikeMainList);
+
+        setNotes(data);
+        setNotesLoaded(true);
+      },
+      (error) => {
+        console.error("Error cargando notas:", error);
+        setNotes([]);
+        setNotesLoaded(true);
+      }
+    );
+
     return () => {
       unsubscribeTasks();
       unsubscribeProjects();
       unsubscribePayments();
+      unsubscribeNotes();
     };
   }, [user]);
 
@@ -323,6 +352,25 @@ const Home = () => {
     return tasks.slice(0, 4);
   }, [tasks]);
 
+  const recentNotes = useMemo(() => {
+    return notes
+      .slice(0, 2)
+      .map((note) => {
+        const relatedProject = note.projectId
+          ? projects.find((project) => project.id === note.projectId)
+          : null;
+
+        return {
+          ...note,
+          projectName:
+            note.projectName || relatedProject?.name || "Nota personal",
+          projectLogoUrl: note.projectLogoUrl || relatedProject?.logoUrl || null,
+          projectColor:
+            note.projectColor || relatedProject?.color || theme.palette.primary.main,
+        };
+      });
+  }, [notes, projects, theme.palette.primary.main]);
+
   return (
     <Box
       sx={{
@@ -374,8 +422,6 @@ const Home = () => {
                 gap: { xs: 2, md: 2.4 },
               }}
             >
-              <ActiveProgressCard stats={stats} />
-
               <TaskSection
                 title="Tareas"
                 subtitle="Estas son tus siguientes tareas según tu orden principal"
@@ -383,6 +429,8 @@ const Home = () => {
                 icon={<FormatListBulletedRoundedIcon />}
                 color={theme.palette.primary.main}
               />
+
+              <WorkspaceSummaryCard stats={stats} notes={recentNotes} />
             </Box>
           </>
         )}
@@ -744,7 +792,7 @@ const OverviewGrid = ({ stats }) => {
   );
 };
 
-const ActiveProgressCard = ({ stats }) => {
+const WorkspaceSummaryCard = ({ stats, notes }) => {
   const theme = useTheme();
 
   return (
@@ -756,26 +804,21 @@ const ActiveProgressCard = ({ stats }) => {
         height: "100%",
       }}
     >
-      <Stack spacing={2} sx={{ height: "100%" }}>
-        <Stack
-          direction="row"
-          alignItems="center"
-          justifyContent="space-between"
-          spacing={2}
-        >
-          <Stack direction="row" alignItems="center" spacing={1.4} sx={{ minWidth: 0 }}>
+      <Stack spacing={2.1} sx={{ height: "100%" }}>
+        <Box>
+          <Stack direction="row" alignItems="center" spacing={1.4} sx={{ mb: 1.6 }}>
             <Avatar
               variant="rounded"
               sx={{
                 width: 46,
                 height: 46,
                 borderRadius: "16px",
-                color: theme.palette.info.main,
-                backgroundColor: alpha(theme.palette.info.main, 0.12),
+                color: theme.palette.warning.main,
+                backgroundColor: alpha(theme.palette.warning.main, 0.12),
                 flexShrink: 0,
               }}
             >
-              <TrendingUpRoundedIcon />
+              <PaymentsRoundedIcon />
             </Avatar>
 
             <Box sx={{ minWidth: 0 }}>
@@ -786,7 +829,7 @@ const ActiveProgressCard = ({ stats }) => {
                   fontSize: "1.05rem",
                 }}
               >
-                Avance de tareas activas
+                Resumen de cobros
               </Typography>
 
               <Typography
@@ -798,156 +841,92 @@ const ActiveProgressCard = ({ stats }) => {
                   fontWeight: 600,
                 }}
               >
-                En progreso sobre pendientes + en progreso.
+                Estado pendiente de tus proyectos facturados.
               </Typography>
             </Box>
           </Stack>
 
-          <Typography
+          <Box
             sx={{
-              color: theme.palette.info.main,
-              fontWeight: 950,
-              fontSize: { xs: "2rem", md: "2.35rem" },
-              lineHeight: 1,
-              letterSpacing: "-0.9px",
-              flexShrink: 0,
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+              gap: 1.2,
             }}
           >
-            {stats.inProgressPercent}%
-          </Typography>
-        </Stack>
+            <PaymentMiniStat
+              title="Sin cobrar"
+              value={stats.unpaidPayments}
+              helper="Pagos todavía pendientes"
+              icon={<PaymentsRoundedIcon />}
+              color={theme.palette.warning.main}
+            />
 
-        <Box
-          sx={{
-            borderRadius: "20px",
-            p: { xs: 1.5, md: 1.8 },
-            backgroundColor: getSoftBackground(theme),
-            border: `1px solid ${theme.palette.app.borderSoft}`,
-          }}
-        >
-          <Stack
-            direction="row"
-            alignItems="center"
-            justifyContent="space-between"
-            spacing={2}
-            sx={{ mb: 1.1 }}
-          >
-            <Box sx={{ minWidth: 0 }}>
-              <Typography
-                sx={{
-                  color: theme.palette.app.secondary,
-                  fontSize: "0.82rem",
-                  fontWeight: 850,
-                }}
-              >
-                En movimiento
-              </Typography>
-
-              <Typography
-                sx={{
-                  mt: 0.25,
-                  color: theme.palette.app.text,
-                  fontSize: "0.84rem",
-                  fontWeight: 750,
-                }}
-              >
-                {stats.inProgressTasks} en progreso de {stats.activeTasks} activas
-              </Typography>
-            </Box>
-          </Stack>
-
-          <Box sx={{ px: { xs: 0.4, md: 0.8} }}>
-            <LinearProgress
-              variant="determinate"
-              value={stats.inProgressPercent}
-              sx={{
-                height: 10,
-                borderRadius: "999px",
-                backgroundColor:
-                  theme.palette.mode === "dark"
-                    ? alpha("#FFFFFF", 0.08)
-                    : alpha("#0F172A", 0.08),
-                "& .MuiLinearProgress-bar": {
-                  borderRadius: "999px",
-                },
-              }}
+            <PaymentMiniStat
+              title="Parciales"
+              value={stats.partialPayments}
+              helper="Cobros iniciados"
+              icon={<AccessTimeRoundedIcon />}
+              color={theme.palette.info.main}
             />
           </Box>
         </Box>
-        <Box
-          sx={{
-            mt: "auto",
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(3, 1fr)" },
-            gap: 1.2,
-          }}
-        >
-          <ProjectMiniStat
-            title="Activas"
-            value={stats.activeTasks}
-            icon={<FormatListBulletedRoundedIcon />}
-            color={theme.palette.primary.main}
-          />
 
-          <ProjectMiniStat
-            title="En progreso"
-            value={stats.inProgressTasks}
-            icon={<AccessTimeRoundedIcon />}
-            color={theme.palette.info.main}
-          />
+        <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
 
-          <ProjectMiniStat
-            title="Pendientes"
-            value={stats.pendingTasks}
-            icon={<PendingActionsRoundedIcon />}
-            color={theme.palette.warning.main}
-          />
-        </Box>
-        <Box sx={{ mt: 0.5 }}>
-          <Typography
-            sx={{
-              color: theme.palette.app.text,
-              fontSize: "0.95rem",
-              fontWeight: 900,
-              mt:1.5
-            }}
-          >
-            Resumen de cobros
-          </Typography>
+        <Box sx={{ flex: 1, minHeight: 0 }}>
+          <Stack direction="row" alignItems="center" spacing={1.4} sx={{ mb: 1.6 }}>
+            <Avatar
+              variant="rounded"
+              sx={{
+                width: 46,
+                height: 46,
+                borderRadius: "16px",
+                color: theme.palette.primary.main,
+                backgroundColor: theme.palette.app.primarySoft,
+                flexShrink: 0,
+              }}
+            >
+              <NotesRoundedIcon />
+            </Avatar>
 
-          <Typography
-            sx={{
-              mt: 0.25,
-              color: theme.palette.app.secondary,
-              fontSize: "0.8rem",
-              fontWeight: 600,
-            }}
-          >
-            Estado pendiente de tus proyectos facturados.
-          </Typography>
-        </Box>
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
-            gap: 1.2,
-          }}
-        >
-          <PaymentMiniStat
-            title="Sin cobrar"
-            value={stats.unpaidPayments}
-            helper="Pagos todavía pendientes"
-            icon={<PaymentsRoundedIcon />}
-            color={theme.palette.warning.main}
-          />
+            <Box sx={{ minWidth: 0 }}>
+              <Typography
+                sx={{
+                  color: theme.palette.app.text,
+                  fontWeight: 900,
+                  fontSize: "1.05rem",
+                }}
+              >
+                Resumen de notas
+              </Typography>
 
-          <PaymentMiniStat
-            title="Parciales"
-            value={stats.partialPayments}
-            helper="Cobros iniciados"
-            icon={<AccessTimeRoundedIcon />}
-            color={theme.palette.info.main}
-          />
+              <Typography
+                noWrap
+                sx={{
+                  mt: 0.25,
+                  color: theme.palette.app.secondary,
+                  fontSize: "0.86rem",
+                  fontWeight: 600,
+                }}
+              >
+                Tus notas recientes vinculadas a proyectos.
+              </Typography>
+            </Box>
+          </Stack>
+
+          {notes.length === 0 ? (
+            <EmptyCard
+              text="Aún no tienes notas guardadas."
+              icon={<NotesRoundedIcon />}
+              color={theme.palette.primary.main}
+            />
+          ) : (
+            <Stack spacing={1.1}>
+              {notes.map((note) => (
+                <NotePreview key={note.id} note={note} />
+              ))}
+            </Stack>
+          )}
         </Box>
       </Stack>
     </Card>
@@ -1469,6 +1448,135 @@ const TaskPreview = ({ task }) => {
             flexShrink: 0,
           }}
         />
+      </Stack>
+    </Card>
+  );
+};
+
+const NotePreview = ({ note }) => {
+  const theme = useTheme();
+
+  const projectColor = note.projectColor || theme.palette.primary.main;
+  const logoUrl = note.projectLogoUrl;
+  const projectLetter = note.projectName?.charAt(0)?.toUpperCase();
+
+  return (
+    <Card
+      elevation={0}
+      sx={{
+        borderRadius: "18px",
+        border: `1px solid ${theme.palette.app.borderSoft}`,
+        backgroundColor:
+          theme.palette.mode === "dark"
+            ? alpha("#FFFFFF", 0.025)
+            : alpha("#FFFFFF", 0.8),
+        boxShadow: "none",
+        transition: "all 0.18s ease",
+        "&:hover": {
+          transform: "translateY(-1px)",
+          borderColor: alpha(projectColor, 0.28),
+          backgroundColor:
+            theme.palette.mode === "dark" ? alpha("#FFFFFF", 0.04) : "#FFFFFF",
+        },
+      }}
+    >
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={1.4}
+        sx={{
+          minHeight: { xs: 74, md: 82 },
+          p: { xs: 1.35, md: 1.55 },
+        }}
+      >
+        <Box
+          sx={{
+            width: { xs: 46, md: 52 },
+            height: { xs: 46, md: 52 },
+            borderRadius: "16px",
+            border: `1px solid ${alpha(projectColor, 0.22)}`,
+            backgroundColor:
+              theme.palette.mode === "dark"
+                ? alpha("#FFFFFF", 0.92)
+                : alpha(projectColor, 0.08),
+            overflow: "hidden",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          {logoUrl ? (
+            <Box
+              component="img"
+              src={logoUrl}
+              alt={note.projectName || "Proyecto"}
+              sx={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              }}
+            />
+          ) : projectLetter ? (
+            <Typography
+              sx={{
+                color: projectColor,
+                fontSize: "1.25rem",
+                fontWeight: 950,
+              }}
+            >
+              {projectLetter}
+            </Typography>
+          ) : (
+            <NotesRoundedIcon
+              sx={{
+                color: projectColor,
+                fontSize: 27,
+              }}
+            />
+          )}
+        </Box>
+
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography
+            noWrap
+            sx={{
+              color: theme.palette.app.text,
+              fontWeight: 900,
+              fontSize: { xs: "0.94rem", md: "1rem" },
+              letterSpacing: "-0.15px",
+            }}
+          >
+            {note.title || "Nota sin título"}
+          </Typography>
+
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={0.7}
+            sx={{ mt: 0.45, minWidth: 0 }}
+          >
+            <FolderRoundedIcon
+              sx={{
+                fontSize: 15,
+                color: theme.palette.app.secondary,
+                flexShrink: 0,
+              }}
+            />
+
+            <Typography
+              noWrap
+              sx={{
+                color: theme.palette.app.secondary,
+                fontSize: "0.82rem",
+                fontWeight: 650,
+                minWidth: 0,
+              }}
+            >
+              {note.projectName || "Nota personal"}
+            </Typography>
+          </Stack>
+        </Box>
       </Stack>
     </Card>
   );
