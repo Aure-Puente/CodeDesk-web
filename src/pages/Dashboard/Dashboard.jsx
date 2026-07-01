@@ -1,5 +1,5 @@
 // Importaciones:
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Box,
@@ -23,6 +23,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  TextField,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
@@ -40,6 +41,12 @@ import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
 import CodeRoundedIcon from "@mui/icons-material/CodeRounded";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
+import CheckRoundedIcon from "@mui/icons-material/CheckRounded";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
+import PhotoCameraRoundedIcon from "@mui/icons-material/PhotoCameraRounded";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import logoLight from "../../assets/images/logo-light.png";
 import logoDark from "../../assets/images/logo-dark.png";
 import Home from "../../components/Home/Home";
@@ -53,6 +60,7 @@ import Credenciales from "../../components/Credenciales/Credenciales";
 import Config from "../../components/Config/Config";
 import { useThemeMode } from "../../context/ThemeModeContext";
 import { useAuth } from "../../context/AuthContext";
+import { db, storage } from "../../firebase/firebase";
 
 // JSX:
 const drawerWidth = 280;
@@ -117,16 +125,26 @@ const sections = [
 const Dashboard = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
 
   const { isDark, toggleThemeMode } = useThemeMode();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   const [selectedSection, setSelectedSection] = useState("inicio");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
 
+  const [nombreUsuario, setNombreUsuario] = useState("Aure");
+  const [nombreInput, setNombreInput] = useState("Aure");
+  const [editingName, setEditingName] = useState(false);
+  const [profileImage, setProfileImage] = useState(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+
   const dashboardLogo = isDark ? logoDark : logoLight;
+
+  const uid = user?.uid || localStorage.getItem("uid") || null;
+  const email = user?.email || localStorage.getItem("email") || "";
 
   const currentSection = useMemo(() => {
     return sections.find((item) => item.id === selectedSection) || sections[0];
@@ -149,8 +167,6 @@ const Dashboard = () => {
     }).format(currentDateTime);
   }, [currentDateTime]);
 
-  const nombreUsuario = localStorage.getItem("nombreCompleto") || "Aure";
-
   const userInitials = useMemo(() => {
     const partes = nombreUsuario
       .trim()
@@ -164,6 +180,61 @@ const Dashboard = () => {
   }, [nombreUsuario]);
 
   useEffect(() => {
+    async function loadUserProfile() {
+      try {
+        const localName = localStorage.getItem("nombreCompleto") || "Aure";
+
+        if (!uid) {
+          setNombreUsuario(localName);
+          setNombreInput(localName);
+          return;
+        }
+
+        const userRef = doc(db, "users", uid);
+        const userSnapshot = await getDoc(userRef);
+
+        if (userSnapshot.exists()) {
+          const data = userSnapshot.data();
+
+          const backendName = data.name || data.nombreCompleto || localName;
+          const backendImage = data.profileImageUrl || null;
+
+          setNombreUsuario(backendName);
+          setNombreInput(backendName);
+          setProfileImage(backendImage);
+
+          localStorage.setItem("nombreCompleto", backendName);
+        } else {
+          await setDoc(
+            userRef,
+            {
+              uid,
+              email,
+              name: localName,
+              profileImageUrl: null,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+
+          setNombreUsuario(localName);
+          setNombreInput(localName);
+          setProfileImage(null);
+        }
+      } catch (error) {
+        console.error("Error cargando perfil:", error);
+
+        const localName = localStorage.getItem("nombreCompleto") || "Aure";
+        setNombreUsuario(localName);
+        setNombreInput(localName);
+      }
+    }
+
+    loadUserProfile();
+  }, [uid, email]);
+
+  useEffect(() => {
     const interval = setInterval(() => {
       setCurrentDateTime(new Date());
     }, 1000);
@@ -174,6 +245,104 @@ const Dashboard = () => {
   const handleChangeSection = (id) => {
     setSelectedSection(id);
     setMobileOpen(false);
+  };
+
+  const handleStartEditName = () => {
+    setNombreInput(nombreUsuario);
+    setEditingName(true);
+  };
+
+  const handleCancelEditName = () => {
+    setNombreInput(nombreUsuario);
+    setEditingName(false);
+  };
+
+  const handleSaveName = async () => {
+    try {
+      const cleanName = nombreInput.trim() || "Aure";
+
+      setSavingProfile(true);
+
+      if (uid) {
+        await setDoc(
+          doc(db, "users", uid),
+          {
+            uid,
+            email,
+            name: cleanName,
+            nombreCompleto: cleanName,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+
+      setNombreUsuario(cleanName);
+      setNombreInput(cleanName);
+      localStorage.setItem("nombreCompleto", cleanName);
+      setEditingName(false);
+    } catch (error) {
+      console.error("Error guardando nombre:", error);
+      window.alert("No se pudo guardar el nombre.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handlePickProfileImage = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleProfileImageChange = async (event) => {
+    try {
+      const file = event.target.files?.[0];
+
+      if (!file) return;
+
+      if (!file.type?.startsWith("image/")) {
+        window.alert("Seleccioná una imagen válida.");
+        event.target.value = "";
+        return;
+      }
+
+      if (!uid) {
+        window.alert("No se pudo identificar el usuario.");
+        event.target.value = "";
+        return;
+      }
+
+      setSavingProfile(true);
+
+      const safeFileName = file.name.replace(/\s+/g, "-").toLowerCase();
+      const imageRef = ref(
+        storage,
+        `users/${uid}/profile/${Date.now()}-${safeFileName}`
+      );
+
+      await uploadBytes(imageRef, file);
+
+      const downloadUrl = await getDownloadURL(imageRef);
+
+      await setDoc(
+        doc(db, "users", uid),
+        {
+          uid,
+          email,
+          profileImageUrl: downloadUrl,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      setProfileImage(downloadUrl);
+      event.target.value = "";
+    } catch (error) {
+      console.error("Error guardando imagen:", error);
+      window.alert("No se pudo guardar la imagen.");
+      event.target.value = "";
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -246,29 +415,30 @@ const Dashboard = () => {
         flexDirection: "column",
       }}
     >
-    <Box
-      sx={{
-        px: 2.5,
-        py: 1.8,
-        height: 130,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
       <Box
-        component="img"
-        src={dashboardLogo}
-        alt="CodeDesk"
         sx={{
-          width: 180,
-          height: 180,
-          marginTop: 1,
-          objectFit: "contain",
-          borderRadius: "24px",
+          px: 2.5,
+          py: 1.8,
+          height: 130,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
-      />
-    </Box>
+      >
+        <Box
+          component="img"
+          src={dashboardLogo}
+          alt="CodeDesk"
+          sx={{
+            width: 180,
+            height: 180,
+            marginTop: 1,
+            objectFit: "contain",
+            borderRadius: "24px",
+          }}
+        />
+      </Box>
+
       <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
 
       <List
@@ -345,22 +515,76 @@ const Dashboard = () => {
             border: `1px solid ${theme.palette.app.borderSoft}`,
           }}
         >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={handleProfileImageChange}
+          />
+
           <Stack direction="row" alignItems="center" spacing={1.4}>
-            <Avatar
+            <Box
               sx={{
-                width: 44,
-                height: 44,
-                bgcolor: theme.palette.primary.main,
-                color: "#ffffff",
-                fontWeight: 900,
-                fontSize: "0.95rem",
-                boxShadow: isDark
-                  ? "0 10px 22px rgba(96, 165, 250, 0.20)"
-                  : "0 10px 22px rgba(37, 99, 235, 0.20)",
+                position: "relative",
+                flexShrink: 0,
               }}
             >
-              {userInitials}
-            </Avatar>
+              <Tooltip title="Cambiar imagen" placement="top" arrow>
+                <Avatar
+                  src={profileImage || undefined}
+                  onClick={savingProfile ? undefined : handlePickProfileImage}
+                  sx={{
+                    width: 48,
+                    height: 48,
+                    bgcolor: theme.palette.primary.main,
+                    color: "#ffffff",
+                    fontWeight: 900,
+                    fontSize: "0.95rem",
+                    boxShadow: isDark
+                      ? "0 10px 22px rgba(96, 165, 250, 0.20)"
+                      : "0 10px 22px rgba(37, 99, 235, 0.20)",
+                    cursor: savingProfile ? "default" : "pointer",
+                    border: `2px solid ${theme.palette.app.surface}`,
+                    opacity: savingProfile ? 0.7 : 1,
+                    "&:hover": {
+                      transform: savingProfile ? "none" : "translateY(-1px)",
+                      boxShadow: isDark
+                        ? "0 14px 28px rgba(96, 165, 250, 0.26)"
+                        : "0 14px 28px rgba(37, 99, 235, 0.26)",
+                    },
+                    transition: "all 0.18s ease",
+                  }}
+                >
+                  {!profileImage && userInitials}
+                </Avatar>
+              </Tooltip>
+
+              <Box
+                onClick={savingProfile ? undefined : handlePickProfileImage}
+                sx={{
+                  position: "absolute",
+                  right: -3,
+                  bottom: -3,
+                  width: 23,
+                  height: 23,
+                  borderRadius: "999px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#ffffff",
+                  backgroundColor: theme.palette.primary.main,
+                  border: `2px solid ${theme.palette.app.surface}`,
+                  cursor: savingProfile ? "default" : "pointer",
+                  opacity: savingProfile ? 0.7 : 1,
+                  "& svg": {
+                    fontSize: 13,
+                  },
+                }}
+              >
+                <PhotoCameraRoundedIcon />
+              </Box>
+            </Box>
 
             <Box sx={{ minWidth: 0, flex: 1 }}>
               <Typography
@@ -375,48 +599,160 @@ const Dashboard = () => {
                 Sesión actual
               </Typography>
 
-              <Tooltip title={nombreUsuario} placement="top" arrow>
-                <Stack
-                  direction="row"
-                  alignItems="center"
-                  spacing={0.75}
-                  sx={{
-                    minWidth: 0,
-                    width: "100%",
-                  }}
-                >
-                  <Typography
-                    noWrap
-                    sx={{
-                      fontWeight: 850,
-                      color: theme.palette.app.text,
-                      fontSize: "0.95rem",
-                      lineHeight: 1.25,
-                      minWidth: 0,
-                      flex: 1,
-                    }}
-                  >
-                    {nombreUsuario}
-                  </Typography>
+              {editingName ? (
+                <Stack direction="row" alignItems="center" spacing={0.6}>
+                  <TextField
+                    value={nombreInput}
+                    onChange={(event) => setNombreInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        handleSaveName();
+                      }
 
-                  <Box
+                      if (event.key === "Escape") {
+                        handleCancelEditName();
+                      }
+                    }}
+                    autoFocus
+                    size="small"
+                    variant="outlined"
+                    placeholder="Tu nombre"
+                    disabled={savingProfile}
                     sx={{
-                      width: 23,
-                      height: 23,
-                      borderRadius: "9px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: theme.palette.primary.main,
-                      backgroundColor: theme.palette.app.primarySoft,
-                      border: `1px solid ${theme.palette.app.borderSoft}`,
-                      flexShrink: 0,
+                      flex: 1,
+                      minWidth: 0,
+                      "& .MuiOutlinedInput-root": {
+                        height: 34,
+                        borderRadius: "12px",
+                        backgroundColor: theme.palette.app.surface,
+                        color: theme.palette.app.text,
+                        fontWeight: 850,
+                        fontSize: "0.86rem",
+                      },
+                      "& .MuiOutlinedInput-input": {
+                        px: 1.1,
+                        py: 0.6,
+                      },
+                    }}
+                  />
+
+                  <IconButton
+                    onClick={handleSaveName}
+                    disabled={savingProfile}
+                    sx={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: "11px",
+                      color: theme.palette.app.success,
+                      backgroundColor:
+                        theme.palette.mode === "dark"
+                          ? alpha(theme.palette.success.main, 0.14)
+                          : alpha(theme.palette.success.main, 0.1),
+                      border: `1px solid ${alpha(
+                        theme.palette.success.main,
+                        0.18
+                      )}`,
+                      "&:hover": {
+                        backgroundColor:
+                          theme.palette.mode === "dark"
+                            ? alpha(theme.palette.success.main, 0.2)
+                            : alpha(theme.palette.success.main, 0.14),
+                      },
                     }}
                   >
-                    <CodeRoundedIcon sx={{ fontSize: 14 }} />
-                  </Box>
+                    <CheckRoundedIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+
+                  <IconButton
+                    onClick={handleCancelEditName}
+                    disabled={savingProfile}
+                    sx={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: "11px",
+                      color: theme.palette.app.secondary,
+                      backgroundColor:
+                        theme.palette.mode === "dark"
+                          ? alpha("#FFFFFF", 0.045)
+                          : alpha("#0F172A", 0.035),
+                      border: `1px solid ${theme.palette.app.borderSoft}`,
+                      "&:hover": {
+                        color: theme.palette.app.danger,
+                        backgroundColor:
+                          theme.palette.mode === "dark"
+                            ? alpha(theme.palette.error.main, 0.14)
+                            : alpha(theme.palette.error.main, 0.08),
+                      },
+                    }}
+                  >
+                    <CloseRoundedIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
                 </Stack>
-              </Tooltip>
+              ) : (
+                <Tooltip title={nombreUsuario} placement="top" arrow>
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    spacing={0.75}
+                    sx={{
+                      minWidth: 0,
+                      width: "100%",
+                    }}
+                  >
+                    <Typography
+                      noWrap
+                      sx={{
+                        fontWeight: 850,
+                        color: theme.palette.app.text,
+                        fontSize: "0.95rem",
+                        lineHeight: 1.25,
+                        minWidth: 0,
+                        flex: 1,
+                      }}
+                    >
+                      {nombreUsuario}
+                    </Typography>
+
+                    <IconButton
+                      onClick={handleStartEditName}
+                      disabled={savingProfile}
+                      sx={{
+                        width: 25,
+                        height: 25,
+                        borderRadius: "9px",
+                        color: theme.palette.primary.main,
+                        backgroundColor: theme.palette.app.primarySoft,
+                        border: `1px solid ${theme.palette.app.borderSoft}`,
+                        flexShrink: 0,
+                        "&:hover": {
+                          backgroundColor: theme.palette.app.primarySoft,
+                          transform: "translateY(-1px)",
+                        },
+                        transition: "all 0.18s ease",
+                      }}
+                    >
+                      <EditRoundedIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+
+                    <Box
+                      sx={{
+                        width: 23,
+                        height: 23,
+                        borderRadius: "9px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: theme.palette.primary.main,
+                        backgroundColor: theme.palette.app.primarySoft,
+                        border: `1px solid ${theme.palette.app.borderSoft}`,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <CodeRoundedIcon sx={{ fontSize: 14 }} />
+                    </Box>
+                  </Stack>
+                </Tooltip>
+              )}
             </Box>
           </Stack>
 
@@ -571,7 +907,7 @@ const Dashboard = () => {
                   fontWeight: 600,
                 }}
               >
-                Todo tu flujo de trabajo centralizado en un solo lugar.              
+                Todo tu flujo de trabajo centralizado en un solo lugar.
               </Typography>
             </Box>
           </Stack>
