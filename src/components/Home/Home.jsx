@@ -26,6 +26,7 @@ import PaymentsRoundedIcon from "@mui/icons-material/PaymentsRounded";
 import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
 import { db } from "../../firebase/firebase";
 import { useAuth } from "../../context/AuthContext";
+import appLogoDark from "../../assets/images/logo-light.png";
 
 //JSX:
 // Funciones auxiliares:
@@ -516,9 +517,13 @@ const ProjectInProgressCard = ({ task, project }) => {
   const projectColor =
     task?.projectColor || project?.color || theme.palette.primary.main;
 
-  const logoUrl = task?.projectLogoUrl || project?.logoUrl;
-  const projectName = task?.projectName || project?.name || "Sin proyecto";
+  const logoUrl = task?.projectLogoUrl || project?.logoUrl || appLogoDark;
+
+  const projectName =
+    task?.projectName || project?.name || "Sin proyecto asignado";
+
   const taskTitle = task?.title || "No hay tareas cargadas";
+
   return (
     <Card
       elevation={0}
@@ -541,15 +546,15 @@ const ProjectInProgressCard = ({ task, project }) => {
           size={{ xs: 124, md: 154 }}
         />
 
-          <Box
-            sx={{
-              minWidth: 0,
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-            }}
-          >
+        <Box
+          sx={{
+            minWidth: 0,
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+          }}
+        >
           <Stack
             direction="row"
             alignItems="center"
@@ -578,36 +583,35 @@ const ProjectInProgressCard = ({ task, project }) => {
                 },
               }}
             />
-
           </Stack>
 
           <Typography
-            noWrap
             sx={{
               color: theme.palette.app.text,
               fontWeight: 950,
               fontSize: { xs: "1.35rem", md: "1.65rem" },
               letterSpacing: "-0.45px",
               lineHeight: 1.12,
-            }}
-          >
-            {projectName}
-          </Typography>
-
-          <Typography
-            sx={{
-              mt: 0.8,
-              color: theme.palette.app.secondary,
-              fontSize: { xs: "0.92rem", md: "0.98rem" },
-              fontWeight: 700,
-              lineHeight: 1.55,
               display: "-webkit-box",
               WebkitLineClamp: 2,
               WebkitBoxOrient: "vertical",
               overflow: "hidden",
             }}
           >
-            Tarea: {taskTitle}
+            {taskTitle}
+          </Typography>
+
+          <Typography
+            noWrap
+            sx={{
+              mt: 0.8,
+              color: theme.palette.app.secondary,
+              fontSize: { xs: "0.9rem", md: "0.96rem" },
+              fontWeight: 700,
+              lineHeight: 1.55,
+            }}
+          >
+            {projectName}
           </Typography>
         </Box>
       </Stack>
