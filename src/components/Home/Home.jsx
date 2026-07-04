@@ -11,7 +11,7 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import { alpha, useTheme } from "@mui/material/styles";
+import { alpha, keyframes, useTheme } from "@mui/material/styles";
 import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
 import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
 import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
@@ -29,6 +29,43 @@ import { useAuth } from "../../context/AuthContext";
 import appLogoDark from "../../assets/images/logo-light.png";
 
 //JSX:
+// Animaciones:
+const fadeInUp = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
+
+const softFadeIn = keyframes`
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+`;
+
+const getFadeInSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${fadeInUp} 420ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
+const getSoftFadeSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${softFadeIn} 380ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
 // Funciones auxiliares:
 const hexToRgba = (hex, opacity = 1) => {
   const clean = String(hex || "").replace("#", "");
@@ -273,7 +310,6 @@ const Home = () => {
     };
   }, [user]);
 
-  // Proyecto en progreso dinámico: toma el proyecto de la primera tarea de la lista principal.
   const featuredTask = useMemo(() => {
     return tasks[0] || null;
   }, [tasks]);
@@ -386,12 +422,17 @@ const Home = () => {
           <HomeSkeleton />
         ) : (
           <>
-            <HeaderCard />
+            <Box sx={getFadeInSx(0)}>
+              <HeaderCard />
+            </Box>
 
-            <OverviewGrid stats={stats} />
+            <Box sx={getFadeInSx(70)}>
+              <OverviewGrid stats={stats} />
+            </Box>
 
             <Box
               sx={{
+                ...getFadeInSx(140),
                 display: "grid",
                 gridTemplateColumns: {
                   xs: "1fr",
@@ -415,6 +456,7 @@ const Home = () => {
 
             <Box
               sx={{
+                ...getFadeInSx(210),
                 display: "grid",
                 gridTemplateColumns: {
                   xs: "1fr",
@@ -718,12 +760,13 @@ const OverviewGrid = ({ stats }) => {
         gap: { xs: 1.2, md: 1.6 },
       }}
     >
-      {items.map((item) => (
+      {items.map((item, index) => (
         <Card
           key={item.title}
           elevation={0}
           sx={{
             ...getCardStyles(theme),
+            ...getSoftFadeSx(index * 45),
             minHeight: { xs: 92, md: 104 },
             p: { xs: 1.55, md: 1.8 },
             borderRadius: "20px",
@@ -809,7 +852,7 @@ const WorkspaceSummaryCard = ({ stats, notes }) => {
       }}
     >
       <Stack spacing={2.1} sx={{ height: "100%" }}>
-        <Box>
+        <Box sx={getFadeInSx(40)}>
           <Stack direction="row" alignItems="center" spacing={1.4} sx={{ mb: 1.6 }}>
             <Avatar
               variant="rounded"
@@ -863,6 +906,7 @@ const WorkspaceSummaryCard = ({ stats, notes }) => {
               helper="Pagos todavía pendientes"
               icon={<PaymentsRoundedIcon />}
               color={theme.palette.warning.main}
+              delay={90}
             />
 
             <PaymentMiniStat
@@ -871,13 +915,14 @@ const WorkspaceSummaryCard = ({ stats, notes }) => {
               helper="Cobros iniciados"
               icon={<AccessTimeRoundedIcon />}
               color={theme.palette.info.main}
+              delay={135}
             />
           </Box>
         </Box>
 
         <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
 
-        <Box sx={{ flex: 1, minHeight: 0 }}>
+        <Box sx={{ ...getFadeInSx(110), flex: 1, minHeight: 0 }}>
           <Stack direction="row" alignItems="center" spacing={1.4} sx={{ mb: 1.6 }}>
             <Avatar
               variant="rounded"
@@ -926,8 +971,8 @@ const WorkspaceSummaryCard = ({ stats, notes }) => {
             />
           ) : (
             <Stack spacing={1.1}>
-              {notes.map((note) => (
-                <NotePreview key={note.id} note={note} />
+              {notes.map((note, index) => (
+                <NotePreview key={note.id} note={note} delay={index * 55} />
               ))}
             </Stack>
           )}
@@ -1007,6 +1052,7 @@ const ProjectsResume = ({ activeProjects, finishedProjects, totalProjects }) => 
             value={totalProjects}
             icon={<FolderRoundedIcon />}
             color={theme.palette.primary.main}
+            delay={40}
           />
 
           <ProjectMiniStat
@@ -1014,6 +1060,7 @@ const ProjectsResume = ({ activeProjects, finishedProjects, totalProjects }) => 
             value={activeProjects}
             icon={<FolderOpenRoundedIcon />}
             color={theme.palette.info.main}
+            delay={85}
           />
 
           <ProjectMiniStat
@@ -1021,6 +1068,7 @@ const ProjectsResume = ({ activeProjects, finishedProjects, totalProjects }) => 
             value={finishedProjects}
             icon={<TaskAltRoundedIcon />}
             color={theme.palette.success.main}
+            delay={130}
           />
         </Box>
       </Stack>
@@ -1028,12 +1076,13 @@ const ProjectsResume = ({ activeProjects, finishedProjects, totalProjects }) => 
   );
 };
 
-const ProjectMiniStat = ({ title, value, icon, color }) => {
+const ProjectMiniStat = ({ title, value, icon, color, delay = 0 }) => {
   const theme = useTheme();
 
   return (
     <Box
       sx={{
+        ...getSoftFadeSx(delay),
         borderRadius: "18px",
         p: 1.35,
         backgroundColor: getSoftBackground(theme),
@@ -1091,12 +1140,13 @@ const ProjectMiniStat = ({ title, value, icon, color }) => {
   );
 };
 
-const PaymentMiniStat = ({ title, value, helper, icon, color }) => {
+const PaymentMiniStat = ({ title, value, helper, icon, color, delay = 0 }) => {
   const theme = useTheme();
 
   return (
     <Box
       sx={{
+        ...getSoftFadeSx(delay),
         borderRadius: "18px",
         p: 1.35,
         backgroundColor: getSoftBackground(theme),
@@ -1238,8 +1288,8 @@ const TaskSection = ({ title, subtitle, tasks, icon, color }) => {
           />
         ) : (
           <Stack spacing={1.1}>
-            {tasks.map((task) => (
-              <TaskPreview key={task.id} task={task} />
+            {tasks.map((task, index) => (
+              <TaskPreview key={task.id} task={task} delay={index * 55} />
             ))}
           </Stack>
         )}
@@ -1254,6 +1304,7 @@ const EmptyCard = ({ text, icon, color }) => {
   return (
     <Box
       sx={{
+        ...getSoftFadeSx(40),
         borderRadius: "18px",
         border: `1px dashed ${theme.palette.app.borderSoft}`,
         backgroundColor:
@@ -1294,7 +1345,7 @@ const EmptyCard = ({ text, icon, color }) => {
   );
 };
 
-const TaskPreview = ({ task }) => {
+const TaskPreview = ({ task, delay = 0 }) => {
   const theme = useTheme();
 
   const statusColor = getStatusColor(theme, task.status);
@@ -1306,6 +1357,7 @@ const TaskPreview = ({ task }) => {
     <Card
       elevation={0}
       sx={{
+        ...getSoftFadeSx(delay),
         borderRadius: "18px",
         border: `1px solid ${theme.palette.app.borderSoft}`,
         backgroundColor:
@@ -1457,7 +1509,7 @@ const TaskPreview = ({ task }) => {
   );
 };
 
-const NotePreview = ({ note }) => {
+const NotePreview = ({ note, delay = 0 }) => {
   const theme = useTheme();
 
   const projectColor = note.projectColor || theme.palette.primary.main;
@@ -1468,6 +1520,7 @@ const NotePreview = ({ note }) => {
     <Card
       elevation={0}
       sx={{
+        ...getSoftFadeSx(delay),
         borderRadius: "18px",
         border: `1px solid ${theme.palette.app.borderSoft}`,
         backgroundColor:
@@ -1595,6 +1648,7 @@ const HomeSkeleton = () => {
         variant="rounded"
         height={185}
         sx={{
+          ...getSoftFadeSx(0),
           borderRadius: "24px",
           backgroundColor:
             theme.palette.mode === "dark"
@@ -1613,12 +1667,13 @@ const HomeSkeleton = () => {
           gap: { xs: 1.2, md: 1.6 },
         }}
       >
-        {[1, 2, 3, 4].map((item) => (
+        {[1, 2, 3, 4].map((item, index) => (
           <Skeleton
             key={item}
             variant="rounded"
             height={92}
             sx={{
+              ...getSoftFadeSx(index * 45),
               borderRadius: "20px",
               backgroundColor:
                 theme.palette.mode === "dark"
@@ -1643,6 +1698,7 @@ const HomeSkeleton = () => {
           variant="rounded"
           height={240}
           sx={{
+            ...getSoftFadeSx(120),
             borderRadius: "24px",
             backgroundColor:
               theme.palette.mode === "dark"
@@ -1655,6 +1711,44 @@ const HomeSkeleton = () => {
           variant="rounded"
           height={240}
           sx={{
+            ...getSoftFadeSx(165),
+            borderRadius: "24px",
+            backgroundColor:
+              theme.palette.mode === "dark"
+                ? alpha("#FFFFFF", 0.08)
+                : alpha("#0F172A", 0.08),
+          }}
+        />
+      </Box>
+
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "1fr",
+            lg: "1fr 1fr",
+          },
+          gap: { xs: 2, md: 2.4 },
+        }}
+      >
+        <Skeleton
+          variant="rounded"
+          height={315}
+          sx={{
+            ...getSoftFadeSx(210),
+            borderRadius: "24px",
+            backgroundColor:
+              theme.palette.mode === "dark"
+                ? alpha("#FFFFFF", 0.08)
+                : alpha("#0F172A", 0.08),
+          }}
+        />
+
+        <Skeleton
+          variant="rounded"
+          height={315}
+          sx={{
+            ...getSoftFadeSx(255),
             borderRadius: "24px",
             backgroundColor:
               theme.palette.mode === "dark"

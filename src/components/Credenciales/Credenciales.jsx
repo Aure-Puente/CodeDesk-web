@@ -21,7 +21,6 @@ import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
 import Divider from "@mui/material/Divider";
 import Tooltip from "@mui/material/Tooltip";
-import Skeleton from "@mui/material/Skeleton";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
 import IconButton from "@mui/material/IconButton";
@@ -34,7 +33,7 @@ import InputLabel from "@mui/material/InputLabel";
 import Select from "@mui/material/Select";
 import InputAdornment from "@mui/material/InputAdornment";
 import Badge from "@mui/material/Badge";
-import { alpha, useTheme } from "@mui/material/styles";
+import { alpha, keyframes, useTheme } from "@mui/material/styles";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
@@ -68,6 +67,43 @@ import { db } from "../../firebase/firebase";
 import { useAuth } from "../../context/AuthContext";
 
 //JSX:
+// Animaciones:
+const fadeInUp = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
+
+const softFadeIn = keyframes`
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+`;
+
+const getFadeInSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${fadeInUp} 420ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
+const getSoftFadeSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${softFadeIn} 380ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
 const TYPES = [
   "Todos",
   "General",
@@ -462,76 +498,87 @@ export default function Credenciales() {
       }}
     >
       <Stack spacing={{ xs: 2.3, md: 3 }}>
-        <PageHeader onCreate={openCreateDialog} stats={stats} />
-
-        {pageError ? (
-          <Alert
-            severity="error"
-            sx={{
-              borderRadius: "16px",
-              border: "1px solid",
-              borderColor: alpha(theme.palette.error.main, 0.2),
-              fontWeight: 700,
-            }}
-          >
-            {pageError}
-          </Alert>
-        ) : null}
-
-        {pageSuccess ? (
-          <Alert
-            severity="success"
-            sx={{
-              borderRadius: "16px",
-              border: "1px solid",
-              borderColor: alpha(theme.palette.success.main, 0.2),
-              fontWeight: 700,
-            }}
-          >
-            {pageSuccess}
-          </Alert>
-        ) : null}
-
-        {loading ? (
-          <CredentialsSkeleton />
-        ) : (
+        {!loading && (
           <>
-            <StatsGrid stats={stats} />
+            <Box sx={getFadeInSx(0)}>
+              <PageHeader onCreate={openCreateDialog} stats={stats} />
+            </Box>
 
-            <FilterPanel
-              filterType={filterType}
-              setFilterType={setFilterType}
-              visibleCount={filteredCredentials.length}
-              totalCount={credentials.length}
-            />
-
-            <ListHeader
-              loading={loading}
-              filteredCount={filteredCredentials.length}
-            />
-
-            {filteredCredentials.length === 0 ? (
-              <EmptyState onCreate={openCreateDialog} />
-            ) : (
-              <Box
+            {pageError ? (
+              <Alert
+                severity="error"
                 sx={{
-                  display: "grid",
-                  gridTemplateColumns: {
-                    xs: "1fr",
-                    lg: "repeat(2, 1fr)",
-                  },
-                  gap: { xs: 1.6, md: 2 },
+                  ...getFadeInSx(40),
+                  borderRadius: "16px",
+                  border: "1px solid",
+                  borderColor: alpha(theme.palette.error.main, 0.2),
+                  fontWeight: 700,
                 }}
               >
-                {filteredCredentials.map((credential) => (
-                  <CredentialCard
-                    key={credential.id}
-                    credential={credential}
-                    onOpen={() => openDetails(credential)}
-                  />
-                ))}
-              </Box>
-            )}
+                {pageError}
+              </Alert>
+            ) : null}
+
+            {pageSuccess ? (
+              <Alert
+                severity="success"
+                sx={{
+                  ...getFadeInSx(60),
+                  borderRadius: "16px",
+                  border: "1px solid",
+                  borderColor: alpha(theme.palette.success.main, 0.2),
+                  fontWeight: 700,
+                }}
+              >
+                {pageSuccess}
+              </Alert>
+            ) : null}
+
+            <Box sx={getFadeInSx(80)}>
+              <StatsGrid stats={stats} />
+            </Box>
+
+            <Box sx={getFadeInSx(140)}>
+              <FilterPanel
+                filterType={filterType}
+                setFilterType={setFilterType}
+                visibleCount={filteredCredentials.length}
+                totalCount={credentials.length}
+              />
+            </Box>
+
+            <Box sx={getFadeInSx(200)}>
+              <ListHeader
+                loading={loading}
+                filteredCount={filteredCredentials.length}
+              />
+            </Box>
+
+            <Box sx={getFadeInSx(260)}>
+              {filteredCredentials.length === 0 ? (
+                <EmptyState onCreate={openCreateDialog} />
+              ) : (
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: {
+                      xs: "1fr",
+                      lg: "repeat(2, 1fr)",
+                    },
+                    gap: { xs: 1.6, md: 2 },
+                  }}
+                >
+                  {filteredCredentials.map((credential, index) => (
+                    <CredentialCard
+                      key={credential.id}
+                      credential={credential}
+                      delay={index * 45}
+                      onOpen={() => openDetails(credential)}
+                    />
+                  ))}
+                </Box>
+              )}
+            </Box>
           </>
         )}
       </Stack>
@@ -725,12 +772,13 @@ function StatsGrid({ stats }) {
         gap: { xs: 1.3, md: 1.8 },
       }}
     >
-      {items.map((item) => (
+      {items.map((item, index) => (
         <Card
           key={item.label}
           variant="outlined"
           sx={{
             ...getGlassCardStyles(theme),
+            ...getSoftFadeSx(index * 45),
             borderRadius: "20px",
             p: { xs: 1.7, md: 2.1 },
             boxShadow: "none",
@@ -946,7 +994,7 @@ function ListHeader({ loading, filteredCount }) {
   );
 }
 
-function CredentialCard({ credential, onOpen }) {
+function CredentialCard({ credential, delay = 0, onOpen }) {
   const theme = useTheme();
 
   const projectColor = credential.projectColor || theme.palette.primary.main;
@@ -960,6 +1008,7 @@ function CredentialCard({ credential, onOpen }) {
       variant="outlined"
       onClick={onOpen}
       sx={{
+        ...getSoftFadeSx(delay),
         borderRadius: "22px",
         bgcolor: theme.palette.app.surface,
         backgroundImage: "none",
@@ -1152,12 +1201,21 @@ function EmptyState({ onCreate }) {
       variant="outlined"
       sx={{
         ...getGlassCardStyles(theme),
+        ...getSoftFadeSx(40),
         borderRadius: "22px",
         overflow: "hidden",
         boxShadow: "none",
       }}
     >
-      <Stack alignItems="center" sx={{ p: { xs: 3, md: 5 } }}>
+      <Stack
+        alignItems="center"
+        justifyContent="center"
+        sx={{
+          width: "100%",
+          p: { xs: 3, md: 5 },
+          textAlign: "center",
+        }}
+      >
         <Avatar
           variant="rounded"
           sx={{
@@ -1166,9 +1224,13 @@ function EmptyState({ onCreate }) {
             borderRadius: 3.2,
             bgcolor: alpha(theme.palette.primary.main, 0.1),
             color: "primary.main",
+            mx: "auto",
             mb: 2.2,
             border: "1px solid",
             borderColor: alpha(theme.palette.primary.main, 0.16),
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
           <KeyRoundedIcon sx={{ fontSize: { xs: 34, md: 42 } }} />
@@ -2337,103 +2399,5 @@ function DeleteDialog({ open, credentialToDelete, onClose, onConfirm }) {
         </Button>
       </DialogActions>
     </Dialog>
-  );
-}
-
-function CredentialsSkeleton() {
-  const theme = useTheme();
-
-  return (
-    <Stack spacing={{ xs: 2.3, md: 3 }}>
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: {
-            xs: "1fr 1fr",
-            md: "repeat(4, 1fr)",
-          },
-          gap: { xs: 1.3, md: 1.8 },
-        }}
-      >
-        {[1, 2, 3, 4].map((item) => (
-          <Skeleton
-            key={item}
-            variant="rounded"
-            height={118}
-            sx={{ borderRadius: 3.5 }}
-          />
-        ))}
-      </Box>
-
-      <Skeleton variant="rounded" height={96} sx={{ borderRadius: 3.5 }} />
-
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: {
-            xs: "1fr",
-            lg: "repeat(2, 1fr)",
-          },
-          gap: { xs: 1.6, md: 2 },
-        }}
-      >
-        {[1, 2, 3, 4].map((item) => (
-          <Card
-            key={item}
-            variant="outlined"
-            sx={{
-              borderRadius: "22px",
-              bgcolor: "background.paper",
-              borderColor:
-                theme.palette.mode === "dark"
-                  ? alpha("#FFFFFF", 0.08)
-                  : alpha("#0F172A", 0.08),
-              overflow: "hidden",
-            }}
-          >
-            <Box sx={{ p: { xs: 2, md: 2.5 } }}>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <Skeleton
-                  variant="rounded"
-                  width={68}
-                  height={68}
-                  sx={{ borderRadius: 3 }}
-                />
-
-                <Box sx={{ flex: 1 }}>
-                  <Skeleton
-                    variant="rounded"
-                    width={94}
-                    height={27}
-                    sx={{ borderRadius: 999, mb: 1 }}
-                  />
-
-                  <Skeleton variant="text" width="78%" height={30} />
-                  <Skeleton variant="text" width="52%" height={22} />
-
-                  <Stack direction="row" spacing={1} sx={{ mt: 1.2 }}>
-                    <Skeleton
-                      variant="rounded"
-                      width={110}
-                      height={29}
-                      sx={{ borderRadius: 999 }}
-                    />
-
-                    <Skeleton
-                      variant="rounded"
-                      width={80}
-                      height={29}
-                      sx={{ borderRadius: 999 }}
-                    />
-                  </Stack>
-                </Box>
-
-                <Skeleton variant="circular" width={28} height={28} />
-              </Stack>
-            </Box>
-          </Card>
-        ))}
-      </Box>
-    </Stack>
   );
 }

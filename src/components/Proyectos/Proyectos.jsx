@@ -12,7 +12,6 @@ import {
   where,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-
 import {
   Alert,
   Avatar,
@@ -26,7 +25,6 @@ import {
   DialogTitle,
   Divider,
   IconButton,
-  Skeleton,
   Stack,
   TextField,
   ToggleButton,
@@ -34,7 +32,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { alpha, useTheme } from "@mui/material/styles";
+import { alpha, keyframes, useTheme } from "@mui/material/styles";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
@@ -61,6 +59,43 @@ import { db, storage } from "../../firebase/firebase";
 import { useAuth } from "../../context/AuthContext";
 
 // JSX:
+// Animaciones:
+const fadeInUp = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
+
+const softFadeIn = keyframes`
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+`;
+
+const getFadeInSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${fadeInUp} 420ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
+const getSoftFadeSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${softFadeIn} 380ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
 // Constantes:
 const COLORS = [
   "#136F63",
@@ -583,52 +618,65 @@ export default function Proyectos() {
       }}
     >
       <Stack spacing={{ xs: 2, md: 2.4 }}>
-        <PageHeader stats={projectStats} onCreate={openCreateDialog} />
-
-        {pageError && (
-          <Alert
-            severity="error"
-            sx={{
-              borderRadius: "18px",
-              border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`,
-              fontWeight: 700,
-            }}
-          >
-            {pageError}
-          </Alert>
-        )}
-
-        {loadingProjects ? (
-          <ProjectsSkeleton />
-        ) : projects.length === 0 ? (
-          <EmptyState onCreate={openCreateDialog} />
-        ) : (
+        {!loadingProjects && (
           <>
-            <StatsGrid stats={projectStats} />
-
-            <ListHeader count={projects.length} />
-
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: {
-                  xs: "1fr",
-                  lg: "repeat(2, minmax(0, 1fr))",
-                },
-                gap: { xs: 1.4, md: 1.7 },
-              }}
-            >
-              {projects.map((project) => (
-                <ProjectCard
-                  key={project.id}
-                  project={project}
-                  related={getRelatedCount(project.id)}
-                  onOpenDetail={() => openProjectDetail(project)}
-                  onEdit={() => openEditDialog(project)}
-                  onDelete={() => openDeleteDialog(project)}
-                />
-              ))}
+            <Box sx={getFadeInSx(0)}>
+              <PageHeader stats={projectStats} onCreate={openCreateDialog} />
             </Box>
+
+            {pageError && (
+              <Alert
+                severity="error"
+                sx={{
+                  ...getFadeInSx(40),
+                  borderRadius: "18px",
+                  border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`,
+                  fontWeight: 700,
+                }}
+              >
+                {pageError}
+              </Alert>
+            )}
+
+            {projects.length === 0 ? (
+              <Box sx={getFadeInSx(70)}>
+                <EmptyState onCreate={openCreateDialog} />
+              </Box>
+            ) : (
+              <>
+                <Box sx={getFadeInSx(70)}>
+                  <StatsGrid stats={projectStats} />
+                </Box>
+
+                <Box sx={getFadeInSx(140)}>
+                  <ListHeader count={projects.length} />
+                </Box>
+
+                <Box
+                  sx={{
+                    ...getFadeInSx(210),
+                    display: "grid",
+                    gridTemplateColumns: {
+                      xs: "1fr",
+                      lg: "repeat(2, minmax(0, 1fr))",
+                    },
+                    gap: { xs: 1.4, md: 1.7 },
+                  }}
+                >
+                  {projects.map((project, index) => (
+                    <ProjectCard
+                      key={project.id}
+                      project={project}
+                      delay={index * 45}
+                      related={getRelatedCount(project.id)}
+                      onOpenDetail={() => openProjectDetail(project)}
+                      onEdit={() => openEditDialog(project)}
+                      onDelete={() => openDeleteDialog(project)}
+                    />
+                  ))}
+                </Box>
+              </>
+            )}
           </>
         )}
       </Stack>
@@ -857,12 +905,13 @@ function StatsGrid({ stats }) {
         gap: { xs: 1.2, md: 1.6 },
       }}
     >
-      {items.map((item) => (
+      {items.map((item, index) => (
         <Card
           key={item.label}
           elevation={0}
           sx={{
             ...getCardStyles(theme),
+            ...getSoftFadeSx(index * 45),
             p: { xs: 1.6, md: 1.9 },
             borderRadius: "20px",
           }}
@@ -975,7 +1024,7 @@ function ListHeader({ count }) {
   );
 }
 
-function ProjectCard({ project, related, onOpenDetail, onEdit, onDelete }) {
+function ProjectCard({ project, related, delay = 0, onOpenDetail, onEdit, onDelete }) {
   const theme = useTheme();
 
   const typeInfo = getProjectType(project.projectType);
@@ -986,6 +1035,7 @@ function ProjectCard({ project, related, onOpenDetail, onEdit, onDelete }) {
       elevation={0}
       sx={{
         ...getCardStyles(theme),
+        ...getSoftFadeSx(delay),
         borderRadius: "22px",
         position: "relative",
         overflow: "hidden",
@@ -1291,6 +1341,7 @@ function EmptyState({ onCreate }) {
       elevation={0}
       sx={{
         ...getCardStyles(theme),
+        ...getSoftFadeSx(40),
         p: { xs: 3, md: 4 },
         textAlign: "center",
       }}
@@ -2515,25 +2566,3 @@ function DeleteDialog({ open, projectToDelete, onClose, onConfirm }) {
     );
   }
 
-function ProjectsSkeleton() {
-  const theme = useTheme();
-
-  return (
-    <Stack spacing={1.2}>
-      {[1, 2, 3, 4].map((item) => (
-        <Skeleton
-          key={item}
-          variant="rounded"
-          height={118}
-          sx={{
-            borderRadius: "22px",
-            backgroundColor:
-              theme.palette.mode === "dark"
-                ? alpha("#FFFFFF", 0.08)
-                : alpha("#0F172A", 0.08),
-          }}
-        />
-      ))}
-    </Stack>
-  );
-}

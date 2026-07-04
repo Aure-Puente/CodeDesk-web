@@ -21,8 +21,6 @@ import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
 import Divider from "@mui/material/Divider";
 import Tooltip from "@mui/material/Tooltip";
-import Collapse from "@mui/material/Collapse";
-import Skeleton from "@mui/material/Skeleton";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
 import IconButton from "@mui/material/IconButton";
@@ -35,7 +33,7 @@ import InputLabel from "@mui/material/InputLabel";
 import Select from "@mui/material/Select";
 import InputAdornment from "@mui/material/InputAdornment";
 import Badge from "@mui/material/Badge";
-import { alpha, useTheme } from "@mui/material/styles";
+import { alpha, keyframes, useTheme } from "@mui/material/styles";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
@@ -59,6 +57,43 @@ import { db } from "../../firebase/firebase";
 import { useAuth } from "../../context/AuthContext";
 
 //JSX:
+// Animaciones:
+const fadeInUp = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
+
+const softFadeIn = keyframes`
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+`;
+
+const getFadeInSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${fadeInUp} 420ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
+const getSoftFadeSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${softFadeIn} 380ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
 const hexToRgba = (hex, opacity = 1) => {
   const clean = String(hex || "").replace("#", "");
 
@@ -458,77 +493,92 @@ export default function Notas() {
       }}
     >
       <Stack spacing={{ xs: 2.3, md: 3 }}>
-        <PageHeader onCreate={openCreateDialog} stats={stats} />
+        {!loading && (
+          <>
+            <Box sx={getFadeInSx(0)}>
+              <PageHeader onCreate={openCreateDialog} stats={stats} />
+            </Box>
 
-        {pageError ? (
-          <Alert
-            severity="error"
-            sx={{
-              borderRadius: 3,
-              border: "1px solid",
-              borderColor: alpha(theme.palette.error.main, 0.2),
-              fontWeight: 700,
-            }}
-          >
-            {pageError}
-          </Alert>
-        ) : null}
+            {pageError ? (
+              <Alert
+                severity="error"
+                sx={{
+                  ...getFadeInSx(40),
+                  borderRadius: 3,
+                  border: "1px solid",
+                  borderColor: alpha(theme.palette.error.main, 0.2),
+                  fontWeight: 700,
+                }}
+              >
+                {pageError}
+              </Alert>
+            ) : null}
 
-        {pageSuccess ? (
-          <Alert
-            severity="success"
-            sx={{
-              borderRadius: 3,
-              border: "1px solid",
-              borderColor: alpha(theme.palette.success.main, 0.2),
-              fontWeight: 700,
-            }}
-          >
-            {pageSuccess}
-          </Alert>
-        ) : null}
+            {pageSuccess ? (
+              <Alert
+                severity="success"
+                sx={{
+                  ...getFadeInSx(40),
+                  borderRadius: 3,
+                  border: "1px solid",
+                  borderColor: alpha(theme.palette.success.main, 0.2),
+                  fontWeight: 700,
+                }}
+              >
+                {pageSuccess}
+              </Alert>
+            ) : null}
 
-        <StatsGrid stats={stats} />
+            <Box sx={getFadeInSx(70)}>
+              <StatsGrid stats={stats} />
+            </Box>
 
-        <FiltersCard
-          search={search}
-          setSearch={setSearch}
-          filterProject={filterProject}
-          setFilterProject={setFilterProject}
-          projects={projects}
-          visibleCount={filteredNotes.length}
-          totalCount={notes.length}
-          onResetFilters={resetFilters}
-        />
-
-        <ListHeader loading={loading} filteredCount={filteredNotes.length} />
-
-        {loading ? (
-          <NotesSkeleton />
-        ) : filteredNotes.length === 0 ? (
-          <EmptyState onCreate={openCreateDialog} />
-        ) : (
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: {
-                xs: "1fr",
-                lg: "repeat(2, 1fr)",
-              },
-              gap: { xs: 1.6, md: 2 },
-            }}
-          >
-            {filteredNotes.map((note) => (
-              <NoteCard
-                key={note.id}
-                note={note}
-                onOpenDetail={() => openDetailDialog(note)}
-                onCopy={() => copyNote(note)}
-                onEdit={() => openEditDialog(note)}
-                onDelete={() => openDeleteDialog(note)}
+            <Box sx={getFadeInSx(140)}>
+              <FiltersCard
+                search={search}
+                setSearch={setSearch}
+                filterProject={filterProject}
+                setFilterProject={setFilterProject}
+                projects={projects}
+                visibleCount={filteredNotes.length}
+                totalCount={notes.length}
+                onResetFilters={resetFilters}
               />
-            ))}
-          </Box>
+            </Box>
+
+            <Box sx={getFadeInSx(180)}>
+              <ListHeader loading={loading} filteredCount={filteredNotes.length} />
+            </Box>
+
+            <Box sx={getFadeInSx(210)}>
+              {filteredNotes.length === 0 ? (
+                <EmptyState onCreate={openCreateDialog} />
+              ) : (
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: {
+                      xs: "1fr",
+                      lg: "repeat(2, 1fr)",
+                    },
+                    gap: { xs: 1.6, md: 2 },
+                  }}
+                >
+                  {filteredNotes.map((note, index) => (
+                    <NoteCard
+                      key={note.id}
+                      note={note}
+                      delay={index * 45}
+                      onOpenDetail={() => openDetailDialog(note)}
+                      onCopy={() => copyNote(note)}
+                      onEdit={() => openEditDialog(note)}
+                      onDelete={() => openDeleteDialog(note)}
+                    />
+                  ))}
+                </Box>
+              )}
+            </Box>
+          </>
         )}
       </Stack>
 
@@ -784,12 +834,13 @@ function StatsGrid({ stats }) {
         gap: { xs: 1.3, md: 1.8 },
       }}
     >
-      {items.map((item) => (
+      {items.map((item, index) => (
         <Card
           key={item.label}
           variant="outlined"
           sx={{
             ...getGlassCardStyles(theme),
+            ...getSoftFadeSx(index * 45),
             borderRadius: 3.5,
             p: { xs: 1.7, md: 2.1 },
             boxShadow: "none",
@@ -1082,7 +1133,7 @@ function ListHeader({ loading, filteredCount }) {
   );
 }
 
-function NoteCard({ note, onOpenDetail, onCopy, onEdit, onDelete }) {
+function NoteCard({ note, delay = 0, onOpenDetail, onCopy, onEdit, onDelete }) {
   const theme = useTheme();
 
   const noteColor = note.projectColor || theme.palette.primary.main;
@@ -1093,6 +1144,7 @@ function NoteCard({ note, onOpenDetail, onCopy, onEdit, onDelete }) {
       elevation={0}
       sx={{
         ...getGlassCardStyles(theme),
+        ...getSoftFadeSx(delay),
         borderRadius: "22px",
         overflow: "hidden",
         transition: "all 0.18s ease",
@@ -1397,6 +1449,7 @@ function EmptyState({ onCreate }) {
       variant="outlined"
       sx={{
         ...getGlassCardStyles(theme),
+        ...getSoftFadeSx(40),
         borderRadius: 4,
         overflow: "hidden",
         boxShadow: "none",
@@ -2111,93 +2164,5 @@ function DeleteDialog({ open, noteToDelete, onClose, onConfirm }) {
         </Button>
       </DialogActions>
     </Dialog>
-  );
-}
-
-function NotesSkeleton() {
-  const theme = useTheme();
-
-  return (
-    <Box
-      sx={{
-        display: "grid",
-        gridTemplateColumns: {
-          xs: "1fr",
-          lg: "repeat(2, 1fr)",
-        },
-        gap: { xs: 1.6, md: 2 },
-      }}
-    >
-      {[1, 2, 3, 4].map((item) => (
-        <Card
-          key={item}
-          variant="outlined"
-          sx={{
-            borderRadius: 4,
-            bgcolor: "background.paper",
-            borderColor:
-              theme.palette.mode === "dark"
-                ? alpha("#FFFFFF", 0.08)
-                : alpha("#0F172A", 0.08),
-            overflow: "hidden",
-          }}
-        >
-          <Box sx={{ p: { xs: 2, md: 2.5 } }}>
-            <Stack direction="row" spacing={2}>
-              <Skeleton
-                variant="rounded"
-                width={70}
-                height={70}
-                sx={{ borderRadius: 3 }}
-              />
-
-              <Box sx={{ flex: 1 }}>
-                <Skeleton
-                  variant="rounded"
-                  width={110}
-                  height={27}
-                  sx={{ borderRadius: 999, mb: 1 }}
-                />
-                <Skeleton variant="text" width="78%" height={30} />
-                <Skeleton variant="text" width="44%" height={22} />
-              </Box>
-            </Stack>
-
-            <Box
-              sx={{
-                mt: 2,
-                borderRadius: 3,
-                border: "1px solid",
-                borderColor:
-                  theme.palette.mode === "dark"
-                    ? alpha("#FFFFFF", 0.075)
-                    : alpha("#0F172A", 0.075),
-                p: 1.7,
-              }}
-            >
-              <Skeleton variant="text" width="94%" height={22} />
-              <Skeleton variant="text" width="82%" height={22} />
-              <Skeleton variant="text" width="58%" height={22} />
-            </Box>
-
-            <Divider sx={{ my: 2 }} />
-
-            <Stack direction="row" justifyContent="space-between">
-              <Skeleton
-                variant="rounded"
-                width={100}
-                height={40}
-                sx={{ borderRadius: 999 }}
-              />
-
-              <Stack direction="row" spacing={1}>
-                <Skeleton variant="circular" width={42} height={42} />
-                <Skeleton variant="circular" width={42} height={42} />
-              </Stack>
-            </Stack>
-          </Box>
-        </Card>
-      ))}
-    </Box>
   );
 }

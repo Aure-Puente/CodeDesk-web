@@ -7,7 +7,7 @@ import Avatar from "@mui/material/Avatar";
 import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
 import Typography from "@mui/material/Typography";
-import { alpha, useTheme } from "@mui/material/styles";
+import { alpha, keyframes, useTheme } from "@mui/material/styles";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import ConstructionRoundedIcon from "@mui/icons-material/ConstructionRounded";
 import PaletteRoundedIcon from "@mui/icons-material/PaletteRounded";
@@ -18,6 +18,43 @@ import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
 import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
 
 //JSX
+// Animaciones:
+const fadeInUp = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
+
+const softFadeIn = keyframes`
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+`;
+
+const getFadeInSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${fadeInUp} 420ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
+const getSoftFadeSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${softFadeIn} 380ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
 // Estilos:
 const getCardStyles = (theme) => ({
   borderRadius: "22px",
@@ -78,6 +115,7 @@ const Config = () => {
           elevation={0}
           sx={{
             ...getCardStyles(theme),
+            ...getFadeInSx(0),
             p: { xs: 2.2, md: 3 },
           }}
         >
@@ -155,6 +193,7 @@ const Config = () => {
           elevation={0}
           sx={{
             ...getCardStyles(theme),
+            ...getFadeInSx(80),
             overflow: "hidden",
           }}
         >
@@ -291,11 +330,12 @@ const Config = () => {
               </Typography>
 
               <Stack spacing={1.2}>
-                {futureItems.map((item) => (
+                {futureItems.map((item, index) => (
                   <Card
                     key={item.title}
                     elevation={0}
                     sx={{
+                      ...getSoftFadeSx(160 + index * 55),
                       borderRadius: "16px",
                       border: `1px solid ${theme.palette.app.borderSoft}`,
                       backgroundColor: theme.palette.app.surface,

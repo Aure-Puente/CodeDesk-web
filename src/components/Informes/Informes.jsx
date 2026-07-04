@@ -7,11 +7,10 @@ import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
 import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
-import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import LinearProgress from "@mui/material/LinearProgress";
 import Divider from "@mui/material/Divider";
-import { alpha, useTheme } from "@mui/material/styles";
+import { alpha, keyframes, useTheme } from "@mui/material/styles";
 import { BarChart } from "@mui/x-charts/BarChart";
 import { PieChart } from "@mui/x-charts/PieChart";
 import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
@@ -39,6 +38,62 @@ import { db } from "../../firebase/firebase";
 import { useAuth } from "../../context/AuthContext";
 
 //JSX:
+// Animaciones:
+const fadeInUp = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
+
+const softFadeIn = keyframes`
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+`;
+
+const getFadeInSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${fadeInUp} 420ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
+const getSoftFadeSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${softFadeIn} 380ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
+const CHART_DELAY_MS = 620;
+
+const getSlowChartSx = () => ({
+  "& .MuiPieChart-arc": {
+    transitionDuration: "1300ms !important",
+    animationDuration: "1300ms !important",
+    transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1) !important",
+  },
+  "& .MuiPieChart-animate .MuiPieChart-arc": {
+    animationDuration: "1300ms !important",
+    animationTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1) !important",
+  },
+  "& .MuiBarElement-root": {
+    transitionDuration: "1300ms !important",
+    animationDuration: "1300ms !important",
+    transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1) !important",
+  },
+});
+
 const RANGE_OPTIONS = [
   { label: "Todo", value: "all", icon: <CalendarMonthRoundedIcon /> },
   { label: "Este mes", value: "month", icon: <DateRangeRoundedIcon /> },
@@ -134,6 +189,7 @@ export default function Informes() {
 
   const [range, setRange] = useState("all");
   const [pageError, setPageError] = useState("");
+  const [chartsReady, setChartsReady] = useState(false);
 
   const loading = loadingTasks || loadingProjects || loadingPayments || loadingNotes;
 
@@ -372,6 +428,33 @@ export default function Informes() {
     ];
   }, [stats]);
 
+  useEffect(() => {
+    if (loading) {
+      setChartsReady(false);
+      return undefined;
+    }
+
+    setChartsReady(false);
+
+    const timer = window.setTimeout(() => {
+      setChartsReady(true);
+    }, CHART_DELAY_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    loading,
+    range,
+    stats.totalTasks,
+    stats.totalProjects,
+    stats.activeProjects,
+    stats.pausedProjects,
+    stats.finishedProjects,
+    stats.pendingTasks,
+    stats.inProgressTasks,
+    stats.completedTasks,
+    stats.pausedTasks,
+  ]);
+
   return (
     <Box
       sx={{
@@ -384,16 +467,19 @@ export default function Informes() {
       }}
     >
       <Stack spacing={{ xs: 2.2, md: 2.6 }}>
-        <PageHeader
-          range={range}
-          taskProgressPercent={taskProgressPercent}
-          projectProgressPercent={projectProgressPercent}
-        />
+        <Box sx={getFadeInSx(0)}>
+          <PageHeader
+            range={range}
+            taskProgressPercent={taskProgressPercent}
+            projectProgressPercent={projectProgressPercent}
+          />
+        </Box>
 
         {pageError ? (
           <Alert
             severity="error"
             sx={{
+              ...getFadeInSx(40),
               borderRadius: "18px",
               border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`,
               fontWeight: 700,
@@ -403,16 +489,19 @@ export default function Informes() {
           </Alert>
         ) : null}
 
-        <RangeSelector range={range} setRange={setRange} />
+        <Box sx={getFadeInSx(70)}>
+          <RangeSelector range={range} setRange={setRange} />
+        </Box>
 
-        {loading ? (
-          <StatsSkeleton />
-        ) : (
+        {!loading ? (
           <>
-            <MetricGrid stats={stats} moneyProgress={moneyProgress} />
+            <Box sx={getFadeInSx(140)}>
+              <MetricGrid stats={stats} moneyProgress={moneyProgress} />
+            </Box>
 
             <Box
               sx={{
+                ...getFadeInSx(210),
                 display: "grid",
                 gridTemplateColumns: {
                   xs: "1fr",
@@ -432,14 +521,25 @@ export default function Informes() {
               <ProjectChartCard
                 projectPieData={projectPieData}
                 stats={stats}
+                chartsReady={chartsReady}
+                chartKey={`projects-${range}-${stats.activeProjects}-${stats.pausedProjects}-${stats.finishedProjects}`}
               />
             </Box>
 
-            <TaskChartCard taskBarData={taskBarData} totalTasks={stats.totalTasks} />
+            <Box sx={getFadeInSx(280)}>
+              <TaskChartCard
+                taskBarData={taskBarData}
+                totalTasks={stats.totalTasks}
+                chartsReady={chartsReady}
+                chartKey={`tasks-${range}-${stats.pendingTasks}-${stats.inProgressTasks}-${stats.completedTasks}-${stats.pausedTasks}`}
+              />
+            </Box>
 
-            <FinancialSummary stats={stats} />
+            <Box sx={getFadeInSx(350)}>
+              <FinancialSummary stats={stats} />
+            </Box>
           </>
-        )}
+        ) : null}
       </Stack>
     </Box>
   );
@@ -695,14 +795,14 @@ function MetricGrid({ stats, moneyProgress }) {
         gap: { xs: 1.2, md: 1.6 },
       }}
     >
-      {items.map((item) => (
-        <MetricCard key={item.title} {...item} />
+      {items.map((item, index) => (
+        <MetricCard key={item.title} {...item} delay={index * 45} />
       ))}
     </Box>
   );
 }
 
-function MetricCard({ title, value, icon, color, helper }) {
+function MetricCard({ title, value, icon, color, helper, delay = 0 }) {
   const theme = useTheme();
 
   return (
@@ -710,6 +810,7 @@ function MetricCard({ title, value, icon, color, helper }) {
       elevation={0}
       sx={{
         ...getCardStyles(theme),
+        ...getSoftFadeSx(delay),
         p: { xs: 1.55, md: 1.85 },
         borderRadius: "20px",
         boxShadow: "none",
@@ -984,7 +1085,7 @@ function MiniMetric({ title, value, color }) {
   );
 }
 
-function ProjectChartCard({ projectPieData, stats }) {
+function ProjectChartCard({ projectPieData, stats, chartsReady, chartKey }) {
   const theme = useTheme();
 
   return (
@@ -1000,29 +1101,33 @@ function ProjectChartCard({ projectPieData, stats }) {
         <Stack spacing={1.8}>
           <Box
             sx={{
+              ...getSlowChartSx(),
               height: { xs: 230, md: 260 },
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <PieChart
-              series={[
-                {
-                  data: projectPieData,
-                  innerRadius: 58,
-                  outerRadius: 104,
-                  paddingAngle: 3,
-                  cornerRadius: 6,
-                  highlightScope: {
-                    faded: "global",
-                    highlighted: "item",
+            {chartsReady ? (
+              <PieChart
+                key={chartKey}
+                series={[
+                  {
+                    data: projectPieData,
+                    innerRadius: 58,
+                    outerRadius: 104,
+                    paddingAngle: 3,
+                    cornerRadius: 6,
+                    highlightScope: {
+                      faded: "global",
+                      highlighted: "item",
+                    },
                   },
-                },
-              ]}
-              height={255}
-              slotProps={{ legend: { hidden: true } }}
-            />
+                ]}
+                height={255}
+                slotProps={{ legend: { hidden: true } }}
+              />
+            ) : null}
           </Box>
 
           <Box
@@ -1042,7 +1147,7 @@ function ProjectChartCard({ projectPieData, stats }) {
   );
 }
 
-function TaskChartCard({ taskBarData, totalTasks }) {
+function TaskChartCard({ taskBarData, totalTasks, chartsReady, chartKey }) {
   const theme = useTheme();
 
   return (
@@ -1055,22 +1160,31 @@ function TaskChartCard({ taskBarData, totalTasks }) {
       {totalTasks === 0 ? (
         <EmptyBox icon={<PendingActionsRoundedIcon />} text="Todavía no hay tareas para graficar." />
       ) : (
-        <Box sx={{ width: "100%", height: { xs: 280, md: 330 } }}>
-          <BarChart
-            dataset={taskBarData}
-            xAxis={[{ scaleType: "band", dataKey: "label" }]}
-            series={[
-              {
-                dataKey: "value",
-                label: "Tareas",
-                color: theme.palette.primary.main,
-              },
-            ]}
-            height={315}
-            borderRadius={8}
-            grid={{ horizontal: true }}
-            margin={{ top: 28, right: 20, bottom: 35, left: 40 }}
-          />
+        <Box
+          sx={{
+            ...getSlowChartSx(),
+            width: "100%",
+            height: { xs: 280, md: 330 },
+          }}
+        >
+          {chartsReady ? (
+            <BarChart
+              key={chartKey}
+              dataset={taskBarData}
+              xAxis={[{ scaleType: "band", dataKey: "label" }]}
+              series={[
+                {
+                  dataKey: "value",
+                  label: "Tareas",
+                  color: theme.palette.primary.main,
+                },
+              ]}
+              height={315}
+              borderRadius={8}
+              grid={{ horizontal: true }}
+              margin={{ top: 28, right: 20, bottom: 35, left: 40 }}
+            />
+          ) : null}
         </Box>
       )}
     </ChartCard>
@@ -1325,78 +1439,5 @@ function EmptyBox({ text, icon }) {
         </Typography>
       </Stack>
     </Card>
-  );
-}
-
-function StatsSkeleton() {
-  const theme = useTheme();
-
-  return (
-    <Stack spacing={{ xs: 2.2, md: 2.6 }}>
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: {
-            xs: "1fr 1fr",
-            md: "repeat(4, 1fr)",
-          },
-          gap: { xs: 1.2, md: 1.6 },
-        }}
-      >
-        {[1, 2, 3, 4].map((item) => (
-          <Skeleton
-            key={item}
-            variant="rounded"
-            height={92}
-            sx={{
-              borderRadius: "20px",
-              backgroundColor:
-                theme.palette.mode === "dark" ? alpha("#FFFFFF", 0.08) : alpha("#0F172A", 0.08),
-            }}
-          />
-        ))}
-      </Box>
-
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: {
-            xs: "1fr",
-            lg: "0.95fr 1.05fr",
-          },
-          gap: { xs: 2, md: 2.4 },
-        }}
-      >
-        <Skeleton
-          variant="rounded"
-          height={360}
-          sx={{
-            borderRadius: "24px",
-            backgroundColor:
-              theme.palette.mode === "dark" ? alpha("#FFFFFF", 0.08) : alpha("#0F172A", 0.08),
-          }}
-        />
-
-        <Skeleton
-          variant="rounded"
-          height={360}
-          sx={{
-            borderRadius: "24px",
-            backgroundColor:
-              theme.palette.mode === "dark" ? alpha("#FFFFFF", 0.08) : alpha("#0F172A", 0.08),
-          }}
-        />
-      </Box>
-
-      <Skeleton
-        variant="rounded"
-        height={360}
-        sx={{
-          borderRadius: "24px",
-          backgroundColor:
-            theme.palette.mode === "dark" ? alpha("#FFFFFF", 0.08) : alpha("#0F172A", 0.08),
-        }}
-      />
-    </Stack>
   );
 }

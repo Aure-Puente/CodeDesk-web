@@ -21,7 +21,6 @@ import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
 import Divider from "@mui/material/Divider";
 import Tooltip from "@mui/material/Tooltip";
-import Skeleton from "@mui/material/Skeleton";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
 import IconButton from "@mui/material/IconButton";
@@ -34,7 +33,7 @@ import InputLabel from "@mui/material/InputLabel";
 import Select from "@mui/material/Select";
 import InputAdornment from "@mui/material/InputAdornment";
 import Badge from "@mui/material/Badge";
-import { alpha, useTheme } from "@mui/material/styles";
+import { alpha, keyframes, useTheme } from "@mui/material/styles";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
@@ -55,6 +54,43 @@ import { db } from "../../firebase/firebase";
 import { useAuth } from "../../context/AuthContext";
 
 //JSX:
+//Animaciones:
+const fadeInUp = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
+
+const softFadeIn = keyframes`
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+`;
+
+const getFadeInSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${fadeInUp} 420ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
+const getSoftFadeSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${softFadeIn} 380ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
 const hexToRgba = (hex, opacity = 1) => {
   const clean = String(hex || "").replace("#", "");
 
@@ -95,7 +131,7 @@ function getProjectIconBorder(theme, projectColor) {
 
 function getGlassCardStyles(theme) {
   return {
-    borderRadius: "24px",
+    borderRadius: "22px",
     border: `1px solid ${theme.palette.app?.borderSoft || alpha(theme.palette.divider, 0.8)}`,
     backgroundColor: theme.palette.app?.surface || theme.palette.background.paper,
     backgroundImage: "none",
@@ -352,55 +388,71 @@ export default function DataBase() {
       }}
     >
       <Stack spacing={{ xs: 2.3, md: 3 }}>
-        <PageHeader onCreate={openCreateDialog} stats={stats} />
-
-        {pageError ? (
-          <Alert
-            severity="error"
-            sx={{
-              borderRadius: 3,
-              border: "1px solid",
-              borderColor: alpha(theme.palette.error.main, 0.2),
-              fontWeight: 700,
-            }}
-          >
-            {pageError}
-          </Alert>
-        ) : null}
-
-        {loading ? (
-          <DatabasesSkeleton />
-        ) : databases.length === 0 ? (
+        {!loading && (
           <>
-            <StatsGrid stats={stats} />
-            <EmptyState onCreate={openCreateDialog} />
-          </>
-        ) : (
-          <>
-            <StatsGrid stats={stats} />
-
-            <ListHeader count={databases.length} />
-
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: {
-                  xs: "1fr",
-                  lg: "repeat(2, 1fr)",
-                },
-                gap: { xs: 1.6, md: 2 },
-              }}
-            >
-              {databases.map((item) => (
-                <DatabaseCard
-                  key={item.id}
-                  item={item}
-                  onOpen={() => openFirebaseLink(item)}
-                  onEdit={() => openEditDialog(item)}
-                  onDelete={() => openDeleteDialog(item)}
-                />
-              ))}
+            <Box sx={getFadeInSx(0)}>
+              <PageHeader onCreate={openCreateDialog} stats={stats} />
             </Box>
+
+            {pageError ? (
+              <Alert
+                severity="error"
+                sx={{
+                  ...getFadeInSx(40),
+                  borderRadius: 3,
+                  border: "1px solid",
+                  borderColor: alpha(theme.palette.error.main, 0.2),
+                  fontWeight: 700,
+                }}
+              >
+                {pageError}
+              </Alert>
+            ) : null}
+
+            {databases.length === 0 ? (
+              <>
+                <Box sx={getFadeInSx(70)}>
+                  <StatsGrid stats={stats} />
+                </Box>
+
+                <Box sx={getFadeInSx(140)}>
+                  <EmptyState onCreate={openCreateDialog} />
+                </Box>
+              </>
+            ) : (
+              <>
+                <Box sx={getFadeInSx(70)}>
+                  <StatsGrid stats={stats} />
+                </Box>
+
+                <Box sx={getFadeInSx(140)}>
+                  <ListHeader count={databases.length} />
+                </Box>
+
+                <Box
+                  sx={{
+                    ...getFadeInSx(210),
+                    display: "grid",
+                    gridTemplateColumns: {
+                      xs: "1fr",
+                      lg: "repeat(2, 1fr)",
+                    },
+                    gap: { xs: 1.6, md: 2 },
+                  }}
+                >
+                  {databases.map((item, index) => (
+                    <DatabaseCard
+                      key={item.id}
+                      item={item}
+                      delay={index * 45}
+                      onOpen={() => openFirebaseLink(item)}
+                      onEdit={() => openEditDialog(item)}
+                      onDelete={() => openDeleteDialog(item)}
+                    />
+                  ))}
+                </Box>
+              </>
+            )}
           </>
         )}
       </Stack>
@@ -606,12 +658,13 @@ function StatsGrid({ stats }) {
         gap: { xs: 1.3, md: 1.8 },
       }}
     >
-      {items.map((item) => (
+      {items.map((item, index) => (
         <Card
           key={item.label}
           variant="outlined"
           sx={{
             ...getGlassCardStyles(theme),
+            ...getSoftFadeSx(index * 45),
             borderRadius: "20px",
             p: { xs: 1.6, md: 1.9 },
             boxShadow: "none",
@@ -719,7 +772,7 @@ function ListHeader({ count }) {
     </Stack>
   );
 }
-function DatabaseCard({ item, onOpen, onEdit, onDelete }) {
+function DatabaseCard({ item, delay = 0, onOpen, onEdit, onDelete }) {
   const theme = useTheme();
 
   return (
@@ -727,7 +780,8 @@ function DatabaseCard({ item, onOpen, onEdit, onDelete }) {
       variant="outlined"
       sx={{
         ...getGlassCardStyles(theme),
-        borderRadius: "24px",
+        ...getSoftFadeSx(delay),
+        borderRadius: "22px",
         overflow: "hidden",
         boxShadow: "none",
         transition: "0.18s ease",
@@ -1003,7 +1057,8 @@ function EmptyState({ onCreate }) {
       variant="outlined"
       sx={{
         ...getGlassCardStyles(theme),
-        borderRadius: "24px",
+        ...getSoftFadeSx(40),
+        borderRadius: "22px",
         overflow: "hidden",
         boxShadow: "none",
       }}
@@ -1096,7 +1151,7 @@ function DatabaseFormDialog({
       maxWidth="md"
       PaperProps={{
         sx: {
-          borderRadius: "24px",
+          borderRadius: "20px",
           bgcolor: "background.paper",
           border: "1px solid",
           borderColor:
@@ -1128,7 +1183,7 @@ function DatabaseFormDialog({
                 sx={{
                   width: 52,
                   height: 52,
-                  borderRadius: 2.5,
+                  borderRadius: "14px",
                   color: "primary.main",
                   bgcolor: alpha(theme.palette.primary.main, 0.1),
                   border: "1px solid",
@@ -1161,7 +1216,7 @@ function DatabaseFormDialog({
                 right: 16,
                 width: 38,
                 height: 38,
-                borderRadius: "14px",
+                borderRadius: "12px",
                 color: theme.palette.text.secondary,
                 bgcolor:
                   theme.palette.mode === "dark"
@@ -1188,13 +1243,13 @@ function DatabaseFormDialog({
         <DialogContent sx={{ px: { xs: 2.2, md: 3 }, py: { xs: 2.4, md: 3 } }}>
           <Stack spacing={2.4}>
             {pageError ? (
-              <Alert severity="error" sx={{ borderRadius: 3, fontWeight: 700 }}>
+              <Alert severity="error" sx={{ borderRadius: "14px", fontWeight: 700 }}>
                 {pageError}
               </Alert>
             ) : null}
 
             {projects.length === 0 ? (
-              <Alert severity="warning" sx={{ borderRadius: 3, fontWeight: 700 }}>
+              <Alert severity="warning" sx={{ borderRadius: "14px", fontWeight: 700 }}>
                 Primero necesitás crear un proyecto para guardar su enlace de
                 Firebase.
               </Alert>
@@ -1207,7 +1262,7 @@ function DatabaseFormDialog({
                   value={projectId}
                   onChange={(event) => setProjectId(event.target.value)}
                   disabled={saving}
-                  sx={{ borderRadius: 2.8 }}
+                  sx={{ borderRadius: "14px" }}
                 >
                   {projects.map((project) => (
                     <MenuItem key={project.id} value={project.id}>
@@ -1243,7 +1298,7 @@ function DatabaseFormDialog({
                 alignItems="center"
                 spacing={1.3}
                 sx={{
-                  borderRadius: 3,
+                  borderRadius: "14px",
                   border: "1px solid",
                   borderColor:
                     theme.palette.mode === "dark"
@@ -1290,7 +1345,7 @@ function DatabaseFormDialog({
               }}
               sx={{
                 "& .MuiOutlinedInput-root": {
-                  borderRadius: 2.8,
+                  borderRadius: "14px",
                 },
               }}
             />
@@ -1305,7 +1360,7 @@ function DatabaseFormDialog({
               disabled={saving}
               sx={{
                 "& .MuiOutlinedInput-root": {
-                  borderRadius: 2.8,
+                  borderRadius: "14px",
                 },
               }}
             />
@@ -1321,7 +1376,7 @@ function DatabaseFormDialog({
             sx={{
               textTransform: "none",
               fontWeight: 850,
-              borderRadius: 2.4,
+              borderRadius: "12px",
             }}
           >
             Cancelar
@@ -1335,7 +1390,7 @@ function DatabaseFormDialog({
             sx={{
               minHeight: 45,
               px: 2.4,
-              borderRadius: 2.5,
+              borderRadius: "14px",
               fontWeight: 950,
               textTransform: "none",
             }}
@@ -1410,7 +1465,7 @@ function DeleteDialog({ open, databaseToDelete, onClose, onConfirm }) {
       maxWidth="xs"
       PaperProps={{
         sx: {
-          borderRadius: "24px",
+          borderRadius: "20px",
           bgcolor: theme.palette.background.paper,
           backgroundImage: "none",
           border: "1px solid",
@@ -1433,7 +1488,7 @@ function DeleteDialog({ open, databaseToDelete, onClose, onConfirm }) {
               sx={{
                 width: 52,
                 height: 52,
-                borderRadius: "17px",
+                borderRadius: "14px",
                 bgcolor: alpha(theme.palette.error.main, 0.12),
                 color: theme.palette.error.main,
                 border: "1px solid",
@@ -1468,7 +1523,7 @@ function DeleteDialog({ open, databaseToDelete, onClose, onConfirm }) {
             <Box
               sx={{
                 width: "100%",
-                borderRadius: "16px",
+                borderRadius: "14px",
                 border: "1px solid",
                 borderColor:
                   theme.palette.mode === "dark"
@@ -1530,122 +1585,5 @@ function DeleteDialog({ open, databaseToDelete, onClose, onConfirm }) {
         </Button>
       </DialogActions>
     </Dialog>
-  );
-}
-
-function DatabasesSkeleton() {
-  const theme = useTheme();
-
-  return (
-    <Stack spacing={{ xs: 2.3, md: 3 }}>
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: {
-            xs: "1fr 1fr",
-            md: "repeat(4, 1fr)",
-          },
-          gap: { xs: 1.3, md: 1.8 },
-        }}
-      >
-        {[1, 2, 3, 4].map((item) => (
-          <Skeleton
-            key={item}
-            variant="rounded"
-            height={118}
-            sx={{ borderRadius: 3.5 }}
-          />
-        ))}
-      </Box>
-
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: {
-            xs: "1fr",
-            lg: "repeat(2, 1fr)",
-          },
-          gap: { xs: 1.6, md: 2 },
-        }}
-      >
-        {[1, 2, 3, 4].map((item) => (
-          <Card
-            key={item}
-            variant="outlined"
-            sx={{
-              borderRadius: "24px",
-              bgcolor: "background.paper",
-              borderColor:
-                theme.palette.mode === "dark"
-                  ? alpha("#FFFFFF", 0.08)
-                  : alpha("#0F172A", 0.08),
-              overflow: "hidden",
-            }}
-          >
-            <Box sx={{ p: { xs: 2, md: 2.5 } }}>
-              <Stack direction="row" spacing={2}>
-                <Skeleton
-                  variant="rounded"
-                  width={74}
-                  height={74}
-                  sx={{ borderRadius: 3 }}
-                />
-
-                <Box sx={{ flex: 1 }}>
-                  <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
-                    <Skeleton
-                      variant="rounded"
-                      width={86}
-                      height={27}
-                      sx={{ borderRadius: 999 }}
-                    />
-
-                    <Skeleton
-                      variant="rounded"
-                      width={82}
-                      height={27}
-                      sx={{ borderRadius: 999 }}
-                    />
-                  </Stack>
-
-                  <Skeleton variant="text" width="78%" height={30} />
-                  <Skeleton variant="text" width="56%" height={22} />
-                </Box>
-              </Stack>
-
-              <Skeleton
-                variant="rounded"
-                width="100%"
-                height={70}
-                sx={{ mt: 2, borderRadius: 3 }}
-              />
-
-              <Skeleton
-                variant="rounded"
-                width="100%"
-                height={62}
-                sx={{ mt: 1.4, borderRadius: 3 }}
-              />
-
-              <Divider sx={{ my: 2 }} />
-
-              <Stack direction="row" justifyContent="space-between">
-                <Skeleton
-                  variant="rounded"
-                  width={150}
-                  height={44}
-                  sx={{ borderRadius: 999 }}
-                />
-
-                <Stack direction="row" spacing={1}>
-                  <Skeleton variant="circular" width={42} height={42} />
-                  <Skeleton variant="circular" width={42} height={42} />
-                </Stack>
-              </Stack>
-            </Box>
-          </Card>
-        ))}
-      </Box>
-    </Stack>
   );
 }

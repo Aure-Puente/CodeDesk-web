@@ -21,7 +21,6 @@ import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
 import Divider from "@mui/material/Divider";
 import Tooltip from "@mui/material/Tooltip";
-import Skeleton from "@mui/material/Skeleton";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
 import IconButton from "@mui/material/IconButton";
@@ -37,7 +36,7 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Collapse from "@mui/material/Collapse";
 import Badge from "@mui/material/Badge";
-import { alpha, useTheme } from "@mui/material/styles";
+import { alpha, keyframes, useTheme } from "@mui/material/styles";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
@@ -69,6 +68,43 @@ import { db } from "../../firebase/firebase";
 import { useAuth } from "../../context/AuthContext";
 
 //JSX:
+// Animaciones:
+const fadeInUp = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
+
+const softFadeIn = keyframes`
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+`;
+
+const getFadeInSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${fadeInUp} 420ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
+const getSoftFadeSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${softFadeIn} 380ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
 const FILTERS = ["todos", "no_pagado", "parcial", "pagado"];
 
 const CURRENCIES = [
@@ -649,68 +685,74 @@ export default function Pagos() {
       }}
     >
       <Stack spacing={{ xs: 2.3, md: 3 }}>
-        <PageHeader
-          onCreate={openCreateDialog}
-          totalCount={summary.totalCount}
-          overallProgress={overallProgress}
-        />
-
-        {pageError ? (
-          <Alert
-            severity="error"
-            sx={{
-              borderRadius: "14px",
-              border: "1px solid",
-              borderColor: alpha(theme.palette.error.main, 0.2),
-              fontWeight: 700,
-            }}
-          >
-            {pageError}
-          </Alert>
-        ) : null}
-
-        {loading ? (
-          <SummarySkeleton />
-        ) : (
+        {!loading && (
           <>
-            <SummaryGrid
-              summary={summary}
-              formatMoney={formatMoney}
-              overallProgress={overallProgress}
-            />
-
-            <FilterPanel
-              filter={filter}
-              setFilter={setFilter}
-              filteredCount={filteredPayments.length}
-              totalCount={paymentsWithStatus.length}
-            />
-          </>
-        )}
-
-        {loading ? (
-          <PaymentsSkeleton />
-        ) : filteredPayments.length === 0 ? (
-          <EmptyState onCreate={openCreateDialog} />
-        ) : (
-          <Stack spacing={1.7}>
-            {filteredPayments.map((payment) => (
-              <PaymentCard
-                key={payment.id}
-                payment={payment}
-                expanded={Boolean(expandedPayments[payment.id])}
-                onToggleExpanded={() => toggleExpanded(payment.id)}
-                onAddInstallment={() => openInstallmentDialog(payment)}
-                onEdit={() => openEditDialog(payment)}
-                onDelete={() => openDeletePaymentDialog(payment)}
-                onDeleteInstallment={(installment) =>
-                  openDeleteInstallmentDialog(payment, installment)
-                }
-                formatMoney={formatMoney}
-                formatDate={formatDate}
+            <Box sx={getFadeInSx(0)}>
+              <PageHeader
+                onCreate={openCreateDialog}
+                totalCount={summary.totalCount}
+                overallProgress={overallProgress}
               />
-            ))}
-          </Stack>
+            </Box>
+
+            {pageError ? (
+              <Alert
+                severity="error"
+                sx={{
+                  ...getFadeInSx(40),
+                  borderRadius: "14px",
+                  border: "1px solid",
+                  borderColor: alpha(theme.palette.error.main, 0.2),
+                  fontWeight: 700,
+                }}
+              >
+                {pageError}
+              </Alert>
+            ) : null}
+
+            <Box sx={getFadeInSx(70)}>
+              <SummaryGrid
+                summary={summary}
+                formatMoney={formatMoney}
+                overallProgress={overallProgress}
+              />
+            </Box>
+
+            <Box sx={getFadeInSx(140)}>
+              <FilterPanel
+                filter={filter}
+                setFilter={setFilter}
+                filteredCount={filteredPayments.length}
+                totalCount={paymentsWithStatus.length}
+              />
+            </Box>
+
+            <Box sx={getFadeInSx(210)}>
+              {filteredPayments.length === 0 ? (
+                <EmptyState onCreate={openCreateDialog} />
+              ) : (
+                <Stack spacing={1.7}>
+                  {filteredPayments.map((payment, index) => (
+                    <PaymentCard
+                      key={payment.id}
+                      payment={payment}
+                      delay={index * 45}
+                      expanded={Boolean(expandedPayments[payment.id])}
+                      onToggleExpanded={() => toggleExpanded(payment.id)}
+                      onAddInstallment={() => openInstallmentDialog(payment)}
+                      onEdit={() => openEditDialog(payment)}
+                      onDelete={() => openDeletePaymentDialog(payment)}
+                      onDeleteInstallment={(installment) =>
+                        openDeleteInstallmentDialog(payment, installment)
+                      }
+                      formatMoney={formatMoney}
+                      formatDate={formatDate}
+                    />
+                  ))}
+                </Stack>
+              )}
+            </Box>
+          </>
         )}
       </Stack>
 
@@ -1024,13 +1066,14 @@ function SummaryGrid({ summary, formatMoney, overallProgress }) {
         gap: { xs: 1.3, md: 1.8 },
       }}
     >
-      {cards.map((item) => (
+      {cards.map((item, index) => (
         <SummaryCard
           key={item.title}
           title={item.title}
           value={item.value}
           icon={item.icon}
           color={item.color}
+          delay={index * 45}
         />
       ))}
 
@@ -1120,7 +1163,7 @@ function SummaryGrid({ summary, formatMoney, overallProgress }) {
   );
 }
 
-function SummaryCard({ title, value, icon, color }) {
+function SummaryCard({ title, value, icon, color, delay = 0 }) {
   const theme = useTheme();
 
   return (
@@ -1128,6 +1171,7 @@ function SummaryCard({ title, value, icon, color }) {
       variant="outlined"
       sx={{
         ...getGlassCardStyles(theme),
+        ...getSoftFadeSx(delay),
         borderRadius: "16px",
         p: { xs: 1.7, md: 2 },
         boxShadow: "none",
@@ -1297,6 +1341,7 @@ function FilterChip({ label, icon, selected, color, onClick }) {
 
 function PaymentCard({
   payment,
+  delay = 0,
   expanded,
   onToggleExpanded,
   onAddInstallment,
@@ -1319,6 +1364,7 @@ function PaymentCard({
     <Card
       variant="outlined"
       sx={{
+        ...getSoftFadeSx(delay),
         position: "relative",
         borderRadius: "18px",
         bgcolor:
@@ -1991,6 +2037,7 @@ function EmptyState({ onCreate }) {
       variant="outlined"
       sx={{
         ...getGlassCardStyles(theme),
+        ...getSoftFadeSx(40),
         borderRadius: "18px",
         overflow: "hidden",
         boxShadow: "none",
@@ -2182,7 +2229,6 @@ function PaymentFormDialog({
                   value={projectId}
                   onChange={(event) => setProjectId(event.target.value)}
                   disabled={saving}
-                  sx={{ borderRadius: 2.8 }}
                 >
                   {projects.map((project) => (
                     <MenuItem key={project.id} value={project.id}>
@@ -2846,111 +2892,5 @@ function DeleteDialog({
         </Button>
       </DialogActions>
     </Dialog>
-  );
-}
-
-function SummarySkeleton() {
-  return (
-    <Box
-      sx={{
-        display: "grid",
-        gridTemplateColumns: {
-          xs: "1fr",
-          sm: "repeat(2, 1fr)",
-          lg: "repeat(4, 1fr)",
-        },
-        gap: { xs: 1.3, md: 1.8 },
-      }}
-    >
-      {[1, 2, 3, 4].map((item) => (
-        <Skeleton
-          key={item}
-          variant="rounded"
-          height={88}
-          sx={{ borderRadius: 3.5 }}
-        />
-      ))}
-
-      <Skeleton
-        variant="rounded"
-        height={94}
-        sx={{
-          gridColumn: "1 / -1",
-          borderRadius: "16px",
-        }}
-      />
-    </Box>
-  );
-}
-
-function PaymentsSkeleton() {
-  const theme = useTheme();
-
-  return (
-    <Stack spacing={1.7}>
-      {[1, 2, 3].map((item) => (
-        <Card
-          key={item}
-          variant="outlined"
-          sx={{
-            borderRadius: "18px",
-            bgcolor: "background.paper",
-            borderColor:
-              theme.palette.mode === "dark"
-                ? alpha("#FFFFFF", 0.08)
-                : alpha("#0F172A", 0.08),
-            overflow: "hidden",
-          }}
-        >
-          <Box sx={{ p: { xs: 2, md: 2.5 } }}>
-            <Stack direction="row" spacing={2}>
-              <Skeleton
-                variant="rounded"
-                width={64}
-                height={64}
-                sx={{ borderRadius: 2.7 }}
-              />
-
-              <Box sx={{ flex: 1 }}>
-                <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
-                  <Skeleton
-                    variant="rounded"
-                    width={95}
-                    height={27}
-                    sx={{ borderRadius: 999 }}
-                  />
-                  <Skeleton
-                    variant="rounded"
-                    width={70}
-                    height={27}
-                    sx={{ borderRadius: 999 }}
-                  />
-                </Stack>
-
-                <Skeleton variant="text" width="70%" height={30} />
-                <Skeleton variant="text" width="48%" height={22} />
-              </Box>
-
-              <Box sx={{ display: { xs: "none", sm: "block" } }}>
-                <Skeleton variant="text" width={80} height={38} />
-                <Skeleton
-                  variant="rounded"
-                  width={76}
-                  height={28}
-                  sx={{ mt: 1, borderRadius: 999 }}
-                />
-              </Box>
-            </Stack>
-
-            <Skeleton
-              variant="rounded"
-              width="100%"
-              height={10}
-              sx={{ mt: 2, borderRadius: 999 }}
-            />
-          </Box>
-        </Card>
-      ))}
-    </Stack>
   );
 }

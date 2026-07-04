@@ -28,13 +28,12 @@ import {
   InputLabel,
   MenuItem,
   Select,
-  Skeleton,
   Stack,
   TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
-import { alpha, useTheme } from "@mui/material/styles";
+import { alpha, keyframes, useTheme } from "@mui/material/styles";
 import {
   DndContext,
   PointerSensor,
@@ -61,13 +60,49 @@ import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import PauseCircleRoundedIcon from "@mui/icons-material/PauseCircleRounded";
 import RestoreRoundedIcon from "@mui/icons-material/RestoreRounded";
 import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
-import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
 import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
 import DragIndicatorRoundedIcon from "@mui/icons-material/DragIndicatorRounded";
 import { db } from "../../firebase/firebase";
 import { useAuth } from "../../context/AuthContext";
 
 //JSX:
+// Animaciones:
+const fadeInUp = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
+
+const softFadeIn = keyframes`
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+`;
+
+const getFadeInSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${fadeInUp} 420ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
+const getSoftFadeSx = (delay = 0) => ({
+  opacity: 0,
+  animation: `${softFadeIn} 380ms ease forwards`,
+  animationDelay: `${delay}ms`,
+});
+
 // Constantes:
 const STATUSES = ["pendiente", "en progreso", "completada", "pausada"];
 
@@ -277,14 +312,6 @@ const Tareas = () => {
     });
   }, [tasks, filterStatus, filterProject]);
 
-  const featuredTask = useMemo(() => {
-    return (
-      tasks.find((task) => task.status === "en progreso") ||
-      tasks.find((task) => task.status === "pendiente") ||
-      null
-    );
-  }, [tasks]);
-
   const resetForm = () => {
     setEditingTask(null);
     setTitle("");
@@ -475,64 +502,76 @@ const Tareas = () => {
       }}
     >
       <Stack spacing={{ xs: 2, md: 2.4 }}>
-        <PageHeader
-          stats={stats}
-          projectsCount={projects.length}
-          onCreate={openCreateDialog}
-        />
+        {!loading && (
+          <>
+            <Box sx={getFadeInSx(0)}>
+              <PageHeader
+                stats={stats}
+                projectsCount={projects.length}
+                onCreate={openCreateDialog}
+              />
+            </Box>
 
-        {pageError && (
-          <Alert
-            severity="error"
-            sx={{
-              borderRadius: "18px",
-              border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`,
-              fontWeight: 700,
-            }}
-          >
-            {pageError}
-          </Alert>
-        )}
+            {pageError && (
+              <Alert
+                severity="error"
+                sx={{
+                  ...getFadeInSx(40),
+                  borderRadius: "18px",
+                  border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`,
+                  fontWeight: 700,
+                }}
+              >
+                {pageError}
+              </Alert>
+            )}
 
-        <StatsGrid stats={stats} />
+            <Box sx={getFadeInSx(70)}>
+              <StatsGrid stats={stats} />
+            </Box>
 
-        <FiltersPanel
-          filterStatus={filterStatus}
-          setFilterStatus={setFilterStatus}
-          filterProject={filterProject}
-          setFilterProject={setFilterProject}
-          projects={projects}
-          visibleCount={filteredTasks.length}
-          totalCount={tasks.length}
-        />
+            <Box sx={getFadeInSx(140)}>
+              <FiltersPanel
+                filterStatus={filterStatus}
+                setFilterStatus={setFilterStatus}
+                filterProject={filterProject}
+                setFilterProject={setFilterProject}
+                projects={projects}
+                visibleCount={filteredTasks.length}
+                totalCount={tasks.length}
+              />
+            </Box>
 
-        {loading ? (
-          <TasksSkeleton />
-        ) : filteredTasks.length === 0 ? (
-          <EmptyState onCreate={openCreateDialog} />
-        ) : (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={filteredTasks.map((task) => task.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              <Stack spacing={1.2}>
-                {filteredTasks.map((task) => (
-                  <SortableTaskCard
-                    key={task.id}
-                    task={task}
-                    onEdit={() => openEditDialog(task)}
-                    onDelete={() => openDeleteDialog(task)}
-                    onToggleDone={() => toggleDone(task)}
-                  />
-                ))}
-              </Stack>
-            </SortableContext>
-          </DndContext>
+            <Box sx={getFadeInSx(210)}>
+              {filteredTasks.length === 0 ? (
+                <EmptyState onCreate={openCreateDialog} />
+              ) : (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={filteredTasks.map((task) => task.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <Stack spacing={1.2}>
+                      {filteredTasks.map((task, index) => (
+                        <SortableTaskCard
+                          key={task.id}
+                          task={task}
+                          delay={index * 45}
+                          onEdit={() => openEditDialog(task)}
+                          onDelete={() => openDeleteDialog(task)}
+                          onToggleDone={() => toggleDone(task)}
+                        />
+                      ))}
+                    </Stack>
+                  </SortableContext>
+                </DndContext>
+              )}
+            </Box>
+          </>
         )}
       </Stack>
 
@@ -663,7 +702,6 @@ const PageHeader = ({ stats, projectsCount, onCreate }) => {
             ml: { xs: 0, lg: "auto" },
           }}
         >
-
           <Button
             variant="contained"
             startIcon={<AddRoundedIcon />}
@@ -712,151 +750,6 @@ const HeaderMiniChip = ({ label }) => {
   );
 };
 
-const FeaturedTaskCard = ({ task }) => {
-  const theme = useTheme();
-
-  if (!task) {
-    return (
-      <Box
-        sx={{
-          minWidth: { xs: "100%", sm: 270 },
-          borderRadius: "20px",
-          p: 1.3,
-          backgroundColor: getSoftBackground(theme),
-          border: `1px solid ${theme.palette.app.borderSoft}`,
-        }}
-      >
-        <Typography sx={{ color: theme.palette.app.text, fontWeight: 900 }}>
-          Sin tarea activa
-        </Typography>
-
-        <Typography
-          sx={{
-            mt: 0.25,
-            color: theme.palette.app.secondary,
-            fontSize: "0.82rem",
-            fontWeight: 600,
-          }}
-        >
-          Creá una tarea para comenzar.
-        </Typography>
-      </Box>
-    );
-  }
-
-  const projectColor = getProjectColor(theme, task);
-  const logoUrl = task.projectLogoUrl;
-  const letter = task.projectName?.charAt(0)?.toUpperCase();
-
-  return (
-    <Box
-      sx={{
-        minWidth: { xs: "100%", sm: 250 },
-        maxWidth: { sm: 335 },
-        minHeight: 108,
-        borderRadius: "20px",
-        px: 1.45,
-        py: 1.2,
-        backgroundColor: getSoftBackground(theme),
-        border: `1px solid ${theme.palette.app.borderSoft}`,
-        display: "flex",
-        alignItems: "center",
-      }}
-    >
-      <Stack
-        direction="row"
-        alignItems="center"
-        spacing={1.55}
-        sx={{
-          width: "100%",
-        }}
-      >
-        <ProjectLogo
-          color={projectColor}
-          logoUrl={logoUrl}
-          letter={letter}
-          size={90}
-        />
-
-        <Box
-          sx={{
-            minWidth: 0,
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-          }}
-        >
-          <Stack
-            direction="row"
-            alignItems="center"
-            spacing={0.75}
-            sx={{
-              mb: 0.45,
-              minHeight: 18,
-            }}
-          >
-            <Box
-              sx={{
-                width: 8,
-                height: 8,
-                borderRadius: "999px",
-                backgroundColor:
-                  task.status === "en progreso"
-                    ? theme.palette.info.main
-                    : theme.palette.warning.main,
-                boxShadow: `0 0 0 5px ${alpha(
-                  task.status === "en progreso"
-                    ? theme.palette.info.main
-                    : theme.palette.warning.main,
-                  0.12
-                )}`,
-                flexShrink: 0,
-              }}
-            />
-
-            <Typography
-              noWrap
-              sx={{
-                color: theme.palette.app.secondary,
-                fontSize: "0.76rem",
-                fontWeight: 850,
-                lineHeight: 1,
-              }}
-            >
-              Proyecto activo
-            </Typography>
-          </Stack>
-
-          <Typography
-            noWrap
-            sx={{
-              color: theme.palette.app.text,
-              fontWeight: 950,
-              fontSize: "1rem",
-              lineHeight: 1.25,
-            }}
-          >
-            {task.projectName || "Tarea personal"}
-          </Typography>
-
-          <Typography
-            noWrap
-            sx={{
-              mt: 0.25,
-              color: theme.palette.app.secondary,
-              fontSize: "0.8rem",
-              fontWeight: 650,
-            }}
-          >
-            {task.title || "Tarea sin título"}
-          </Typography>
-        </Box>
-      </Stack>
-    </Box>
-  );
-};
-
 const StatsGrid = ({ stats }) => {
   const theme = useTheme();
 
@@ -898,14 +791,20 @@ const StatsGrid = ({ stats }) => {
         gap: { xs: 1.2, md: 1.6 },
       }}
     >
-      {items.map((item) => (
+      {items.map((item, index) => (
         <Card
           key={item.label}
           elevation={0}
           sx={{
             ...getCardStyles(theme),
+            ...getSoftFadeSx(index * 45),
             p: { xs: 1.6, md: 1.9 },
             borderRadius: "20px",
+            transition: "all 0.18s ease",
+            "&:hover": {
+              transform: "translateY(-2px)",
+              borderColor: alpha(item.color, 0.28),
+            },
           }}
         >
           <Stack direction="row" alignItems="center" spacing={1.25}>
@@ -1073,7 +972,7 @@ const FiltersPanel = ({
   );
 };
 
-const SortableTaskCard = ({ task, onEdit, onDelete, onToggleDone }) => {
+const SortableTaskCard = ({ task, delay = 0, onEdit, onDelete, onToggleDone }) => {
   const {
     attributes,
     listeners,
@@ -1096,6 +995,7 @@ const SortableTaskCard = ({ task, onEdit, onDelete, onToggleDone }) => {
     <Box ref={setNodeRef} style={style}>
       <TaskCard
         task={task}
+        delay={delay}
         isDragging={isDragging}
         dragAttributes={attributes}
         dragListeners={listeners}
@@ -1109,6 +1009,7 @@ const SortableTaskCard = ({ task, onEdit, onDelete, onToggleDone }) => {
 
 const TaskCard = ({
   task,
+  delay = 0,
   isDragging,
   dragAttributes,
   dragListeners,
@@ -1127,6 +1028,7 @@ const TaskCard = ({
       elevation={0}
       sx={{
         ...getCardStyles(theme),
+        ...(!isDragging ? getSoftFadeSx(delay) : {}),
         borderRadius: "22px",
         opacity: isDone ? 0.72 : 1,
         transition: "all 0.18s ease",
@@ -1182,25 +1084,6 @@ const TaskCard = ({
                   },
                 }}
               />
-
-              {task.status === "en progreso" && (
-                <Chip
-                  size="small"
-                  icon={<RocketLaunchRoundedIcon />}
-                  label="Activa"
-                  sx={{
-                    display: { xs: "none", sm: "inline-flex" },
-                    height: 27,
-                    borderRadius: "999px",
-                    color: theme.palette.primary.main,
-                    backgroundColor: theme.palette.app.primarySoft,
-                    fontWeight: 850,
-                    "& .MuiChip-icon": {
-                      color: theme.palette.primary.main,
-                    },
-                  }}
-                />
-              )}
             </Stack>
 
             <Typography
@@ -1418,6 +1301,7 @@ const EmptyState = ({ onCreate }) => {
       elevation={0}
       sx={{
         ...getCardStyles(theme),
+        ...getSoftFadeSx(40),
         p: { xs: 3, md: 4 },
         textAlign: "center",
       }}
@@ -1520,15 +1404,15 @@ const TaskFormDialog = ({
       }}
     >
       <Box component="form" onSubmit={onSave}>
-          <DialogTitle
-            sx={{
-              position: "relative",
-              px: { xs: 2.2, md: 3 },
-              pt: 2.4,
-              pb: 2,
-              pr: 7,
-            }}
-          >          
+        <DialogTitle
+          sx={{
+            position: "relative",
+            px: { xs: 2.2, md: 3 },
+            pt: 2.4,
+            pb: 2,
+            pr: 7,
+          }}
+        >
           <Stack
             direction="row"
             alignItems="flex-start"
@@ -1889,29 +1773,6 @@ const DeleteDialog = ({ open, taskToDelete, onClose, onConfirm }) => {
         </Button>
       </DialogActions>
     </Dialog>
-  );
-};
-
-const TasksSkeleton = () => {
-  const theme = useTheme();
-
-  return (
-    <Stack spacing={1.2}>
-      {[1, 2, 3, 4].map((item) => (
-        <Skeleton
-          key={item}
-          variant="rounded"
-          height={96}
-          sx={{
-            borderRadius: "22px",
-            backgroundColor:
-              theme.palette.mode === "dark"
-                ? alpha("#FFFFFF", 0.08)
-                : alpha("#0F172A", 0.08),
-          }}
-        />
-      ))}
-    </Stack>
   );
 };
 
