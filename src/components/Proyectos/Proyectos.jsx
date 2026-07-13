@@ -48,7 +48,8 @@ import PauseCircleRoundedIcon from "@mui/icons-material/PauseCircleRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import FormatListBulletedRoundedIcon from "@mui/icons-material/FormatListBulletedRounded";
 import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
-import KeyRoundedIcon from "@mui/icons-material/KeyRounded";
+import LinkRoundedIcon from "@mui/icons-material/LinkRounded";
+import LanguageRoundedIcon from "@mui/icons-material/LanguageRounded";
 import StorageRoundedIcon from "@mui/icons-material/StorageRounded";
 import PaymentsRoundedIcon from "@mui/icons-material/PaymentsRounded";
 import BusinessCenterRoundedIcon from "@mui/icons-material/BusinessCenterRounded";
@@ -221,7 +222,7 @@ export default function Proyectos() {
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [notes, setNotes] = useState([]);
-  const [credentials, setCredentials] = useState([]);
+  const [links, setLinks] = useState([]);
   const [databases, setDatabases] = useState([]);
   const [payments, setPayments] = useState([]);
 
@@ -252,7 +253,7 @@ export default function Proyectos() {
       setProjects([]);
       setTasks([]);
       setNotes([]);
-      setCredentials([]);
+      setLinks([]);
       setDatabases([]);
       setPayments([]);
       setLoadingProjects(false);
@@ -318,10 +319,10 @@ export default function Proyectos() {
       }
     );
 
-    const unsubscribeCredentials = onSnapshot(
-      query(collection(db, "credentials"), where("userId", "==", user.uid)),
+    const unsubscribeLinks = onSnapshot(
+      query(collection(db, "projectLinks"), where("userId", "==", user.uid)),
       (snapshot) => {
-        setCredentials(
+        setLinks(
           snapshot.docs.map((document) => ({
             id: document.id,
             ...document.data(),
@@ -358,7 +359,7 @@ export default function Proyectos() {
       unsubscribeProjects();
       unsubscribeTasks();
       unsubscribeNotes();
-      unsubscribeCredentials();
+      unsubscribeLinks();
       unsubscribeDatabases();
       unsubscribePayments();
     };
@@ -395,7 +396,7 @@ export default function Proyectos() {
       return {
         tasks: [],
         notes: [],
-        credentials: [],
+        links: [],
         databases: [],
         payments: [],
       };
@@ -404,7 +405,7 @@ export default function Proyectos() {
     return {
       tasks: tasks.filter((item) => item.projectId === selectedProjectDetail.id),
       notes: notes.filter((item) => item.projectId === selectedProjectDetail.id),
-      credentials: credentials.filter(
+      links: links.filter(
         (item) => item.projectId === selectedProjectDetail.id
       ),
       databases: databases.filter(
@@ -412,12 +413,12 @@ export default function Proyectos() {
       ),
       payments: payments.filter((item) => item.projectId === selectedProjectDetail.id),
     };
-  }, [selectedProjectDetail, tasks, notes, credentials, databases, payments]);
+  }, [selectedProjectDetail, tasks, notes, links, databases, payments]);
 
   const getRelatedCount = (projectId) => {
     const relatedTasks = tasks.filter((item) => item.projectId === projectId).length;
     const relatedNotes = notes.filter((item) => item.projectId === projectId).length;
-    const relatedCredentials = credentials.filter(
+    const relatedLinks = links.filter(
       (item) => item.projectId === projectId
     ).length;
     const relatedDatabases = databases.filter(
@@ -430,13 +431,13 @@ export default function Proyectos() {
     return {
       tasks: relatedTasks,
       notes: relatedNotes,
-      credentials: relatedCredentials,
+      links: relatedLinks,
       databases: relatedDatabases,
       payments: relatedPayments,
       total:
         relatedTasks +
         relatedNotes +
-        relatedCredentials +
+        relatedLinks +
         relatedDatabases +
         relatedPayments,
     };
@@ -790,8 +791,8 @@ function PageHeader({ stats, onCreate }) {
                 maxWidth: 680,
               }}
             >
-              Centralizá clientes, logos, colores, tareas, pagos, credenciales
-              y enlaces importantes de cada desarrollo.
+              Centralizá clientes, logos, colores, tareas, pagos, enlaces
+              y recursos importantes de cada desarrollo.
             </Typography>
 
             <Stack
@@ -1966,7 +1967,7 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
   const total =
     data.tasks.length +
     data.notes.length +
-    data.credentials.length +
+    data.links.length +
     data.databases.length +
     data.payments.length;
 
@@ -2112,10 +2113,10 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
             />
 
             <CounterPill
-              label="Credenciales"
-              value={data.credentials.length}
-              icon={<KeyRoundedIcon />}
-              color={theme.palette.warning.main}
+              label="Enlaces"
+              value={data.links.length}
+              icon={<LinkRoundedIcon />}
+              color={theme.palette.info.main}
             />
 
             <CounterPill
@@ -2177,34 +2178,39 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
               </DetailSection>
 
               <DetailSection
-                title="Credenciales"
-                icon={<KeyRoundedIcon />}
-                count={data.credentials.length}
-                color={theme.palette.warning.main}
+                title="Enlaces"
+                icon={<LinkRoundedIcon />}
+                count={data.links.length}
+                color={theme.palette.info.main}
               >
-                {data.credentials.length === 0 ? (
-                  <EmptyDetailText text="No hay credenciales asignadas." />
+                {data.links.length === 0 ? (
+                  <EmptyDetailText text="No hay enlaces asignados." />
                 ) : (
-                  data.credentials.map((credential) => (
-                    <DetailItem
-                      key={credential.id}
-                      title={credential.type || "Credencial"}
-                      subtitle={
-                        [
-                          credential.production?.email
-                            ? `Prod: ${credential.production.email}`
-                            : null,
-                          credential.local?.email
-                            ? `Local: ${credential.local.email}`
-                            : null,
-                        ]
+                  data.links.map((link) => {
+                    const isApp = link.type === "App";
+
+                    return (
+                      <DetailItem
+                        key={link.id}
+                        title={isApp ? "App" : "Web"}
+                        subtitle={[link.url || "Sin enlace", link.notes || null]
                           .filter(Boolean)
-                          .join(" · ") || "Sin usuario cargado"
-                      }
-                      icon={<KeyRoundedIcon />}
-                      color={theme.palette.warning.main}
-                    />
-                  ))
+                          .join(" · ")}
+                        icon={
+                          isApp ? (
+                            <SmartphoneRoundedIcon />
+                          ) : (
+                            <LanguageRoundedIcon />
+                          )
+                        }
+                        color={
+                          isApp
+                            ? theme.palette.success.main
+                            : theme.palette.info.main
+                        }
+                      />
+                    );
+                  })
                 )}
               </DetailSection>
 

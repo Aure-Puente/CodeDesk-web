@@ -34,10 +34,10 @@ import PaymentsRoundedIcon from "@mui/icons-material/PaymentsRounded";
 import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
 import AssessmentRoundedIcon from "@mui/icons-material/AssessmentRounded";
 import StorageRoundedIcon from "@mui/icons-material/StorageRounded";
-import LockRoundedIcon from "@mui/icons-material/LockRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
 import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
+import LinkRoundedIcon from "@mui/icons-material/LinkRounded";
 import CodeRoundedIcon from "@mui/icons-material/CodeRounded";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
@@ -56,7 +56,7 @@ import Pagos from "../../components/Pagos/Pagos";
 import Notas from "../../components/Notas/Notas";
 import Informes from "../../components/Informes/Informes";
 import DataBase from "../../components/DataBase/DataBase";
-import Credenciales from "../../components/Credenciales/Credenciales";
+import Enlaces from "../../components/Enlaces/Enlaces";
 import Config from "../../components/Config/Config";
 import { useThemeMode } from "../../context/ThemeModeContext";
 import { useAuth } from "../../context/AuthContext";
@@ -109,11 +109,11 @@ const sections = [
     icon: <StorageRoundedIcon />,
   },
   {
-    id: "credenciales",
-    title: "Credenciales",
-    description: "Datos sensibles y accesos importantes",
-    icon: <LockRoundedIcon />,
-  },
+    id: "enlaces",
+    title: "Enlaces",
+    description: "Sitios web, aplicaciones y recursos de tus proyectos",
+    icon: <LinkRoundedIcon />,
+},
   {
     id: "configuracion",
     title: "Configuración",
@@ -385,8 +385,8 @@ const Dashboard = () => {
       case "database":
         return <DataBase />;
 
-      case "credenciales":
-        return <Credenciales />;
+    case "enlaces":
+      return <Enlaces />;
 
       case "configuracion":
         return <Config />;

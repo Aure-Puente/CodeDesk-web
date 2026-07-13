@@ -551,7 +551,15 @@ function PageHeader({ onCreate }) {
         justifyContent="space-between"
         spacing={{ xs: 2.4, md: 3 }}
       >
-        <Stack direction="row" spacing={1.7} alignItems="center">
+        <Stack
+            direction="row"
+            spacing={1.7}
+            alignItems="center"
+            sx={{
+              flex: 1,
+              minWidth: 0,
+            }}
+          >
           <Avatar
             variant="rounded"
             sx={{
@@ -601,14 +609,27 @@ function PageHeader({ onCreate }) {
           startIcon={<AddRoundedIcon />}
           onClick={onCreate}
           sx={{
-            alignSelf: { xs: "stretch", md: "center" },
-            minHeight: 46,
-            px: 2.4,
-            borderRadius: "14px",
+            alignSelf: {
+              xs: "stretch",
+              md: "center",
+            },
+            ml: {
+              xs: 0,
+              md: "auto",
+            },
+            flexShrink: 0,
+            minHeight: 42,
+            px: 1.7,
+            py: 0,
+            borderRadius: "13px",
             fontWeight: 900,
             textTransform: "none",
             whiteSpace: "nowrap",
             boxShadow: "none",
+            fontSize: "0.84rem",
+            "& .MuiButton-startIcon": {
+              mr: 0.55,
+            },
           }}
         >
           Nuevo enlace
