@@ -178,9 +178,11 @@ const Tareas = () => {
   const [loading, setLoading] = useState(true);
 
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const [editingTask, setEditingTask] = useState(null);
+  const [selectedTask, setSelectedTask] = useState(null);
   const [taskToDelete, setTaskToDelete] = useState(null);
 
   const [title, setTitle] = useState("");
@@ -188,7 +190,7 @@ const Tareas = () => {
   const [status, setStatus] = useState("pendiente");
   const [projectId, setProjectId] = useState("");
 
-  const [filterStatus, setFilterStatus] = useState("todas");
+  const [filterStatus, setFilterStatus] = useState("noCompletadas");
   const [filterProject, setFilterProject] = useState("todos");
 
   const [saving, setSaving] = useState(false);
@@ -299,7 +301,11 @@ const Tareas = () => {
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
       const matchesStatus =
-        filterStatus === "todas" || task.status === filterStatus;
+        filterStatus === "todas"
+          ? true
+          : filterStatus === "noCompletadas"
+          ? task.status !== "completada"
+          : task.status === filterStatus;
 
       const matchesProject =
         filterProject === "todos"
@@ -340,6 +346,16 @@ const Tareas = () => {
     if (saving) return;
     resetForm();
     setTaskDialogOpen(false);
+  };
+
+  const openTaskDetail = (task) => {
+    setSelectedTask(task);
+    setTaskDetailOpen(true);
+  };
+
+  const closeTaskDetail = () => {
+    setSelectedTask(null);
+    setTaskDetailOpen(false);
   };
 
   const openDeleteDialog = (task) => {
@@ -561,6 +577,7 @@ const Tareas = () => {
                           key={task.id}
                           task={task}
                           delay={index * 45}
+                          onOpen={() => openTaskDetail(task)}
                           onEdit={() => openEditDialog(task)}
                           onDelete={() => openDeleteDialog(task)}
                           onToggleDone={() => toggleDone(task)}
@@ -592,6 +609,23 @@ const Tareas = () => {
         pageError={pageError}
         onClose={closeTaskDialog}
         onSave={handleSaveTask}
+      />
+
+      <TaskDetailDialog
+        open={taskDetailOpen}
+        task={selectedTask}
+        onClose={closeTaskDetail}
+        onEdit={() => {
+          if (!selectedTask) return;
+          const task = selectedTask;
+          closeTaskDetail();
+          openEditDialog(task);
+        }}
+        onToggleDone={() => {
+          if (!selectedTask) return;
+          toggleDone(selectedTask);
+          closeTaskDetail();
+        }}
       />
 
       <DeleteDialog
@@ -935,6 +969,7 @@ const FiltersPanel = ({
                 backgroundColor: getSoftBackground(theme),
               }}
             >
+              <MenuItem value="noCompletadas">No completadas</MenuItem>
               <MenuItem value="todas">Todas</MenuItem>
 
               {STATUSES.map((item) => (
@@ -972,7 +1007,7 @@ const FiltersPanel = ({
   );
 };
 
-const SortableTaskCard = ({ task, delay = 0, onEdit, onDelete, onToggleDone }) => {
+const SortableTaskCard = ({ task, delay = 0, onOpen, onEdit, onDelete, onToggleDone }) => {
   const {
     attributes,
     listeners,
@@ -999,6 +1034,7 @@ const SortableTaskCard = ({ task, delay = 0, onEdit, onDelete, onToggleDone }) =
         isDragging={isDragging}
         dragAttributes={attributes}
         dragListeners={listeners}
+        onOpen={onOpen}
         onEdit={onEdit}
         onDelete={onDelete}
         onToggleDone={onToggleDone}
@@ -1013,6 +1049,7 @@ const TaskCard = ({
   isDragging,
   dragAttributes,
   dragListeners,
+  onOpen,
   onEdit,
   onDelete,
   onToggleDone,
@@ -1026,13 +1063,14 @@ const TaskCard = ({
   return (
     <Card
       elevation={0}
+      onClick={onOpen}
       sx={{
         ...getCardStyles(theme),
         ...(!isDragging ? getSoftFadeSx(delay) : {}),
         borderRadius: "22px",
         opacity: isDone ? 0.72 : 1,
         transition: "all 0.18s ease",
-        cursor: isDragging ? "grabbing" : "default",
+        cursor: isDragging ? "grabbing" : "pointer",
         boxShadow: isDragging
           ? theme.palette.mode === "dark"
             ? "0 26px 70px rgba(0, 0, 0, 0.48)"
@@ -1149,7 +1187,10 @@ const TaskCard = ({
           <Stack direction="row" spacing={0.6}>
             <Tooltip title={isDone ? "Restaurar tarea" : "Marcar completada"}>
               <IconButton
-                onClick={onToggleDone}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleDone();
+                }}
                 sx={{
                   width: 40,
                   height: 40,
@@ -1178,7 +1219,10 @@ const TaskCard = ({
 
             <Tooltip title="Editar">
               <IconButton
-                onClick={onEdit}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onEdit();
+                }}
                 sx={{
                   width: 40,
                   height: 40,
@@ -1195,7 +1239,10 @@ const TaskCard = ({
 
             <Tooltip title="Eliminar">
               <IconButton
-                onClick={onDelete}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete();
+                }}
                 sx={{
                   width: 40,
                   height: 40,
@@ -1215,6 +1262,7 @@ const TaskCard = ({
             <IconButton
               {...dragAttributes}
               {...dragListeners}
+              onClick={(event) => event.stopPropagation()}
               sx={{
                 width: 42,
                 height: 42,
@@ -1236,6 +1284,281 @@ const TaskCard = ({
         </Stack>
       </Stack>
     </Card>
+  );
+};
+
+const TaskDetailDialog = ({ open, task, onClose, onEdit, onToggleDone }) => {
+  const theme = useTheme();
+
+  if (!task) return null;
+
+  const isDone = task.status === "completada";
+  const statusColor = getStatusColor(theme, task.status);
+  const projectColor = getProjectColor(theme, task);
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth="sm"
+      PaperProps={{
+        sx: {
+          borderRadius: "24px",
+          backgroundColor: theme.palette.app.surface,
+          backgroundImage: "none",
+          border: `1px solid ${theme.palette.app.borderSoft}`,
+          boxShadow:
+            theme.palette.mode === "dark"
+              ? "0 28px 90px rgba(0,0,0,0.55)"
+              : "0 28px 80px rgba(15,23,42,0.18)",
+          overflow: "hidden",
+        },
+      }}
+    >
+      <DialogTitle
+        sx={{
+          position: "relative",
+          px: { xs: 2.2, md: 3 },
+          pt: 2.4,
+          pb: 2,
+          pr: 7,
+        }}
+      >
+        <Stack direction="row" alignItems="center" spacing={1.4}>
+          <ProjectLogo
+            color={projectColor}
+            logoUrl={task.projectLogoUrl}
+            letter={task.projectName?.charAt(0)?.toUpperCase()}
+            size={58}
+          />
+
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Chip
+              size="small"
+              icon={getStatusIcon(task.status)}
+              label={getStatusLabel(task.status)}
+              sx={{
+                height: 28,
+                mb: 0.8,
+                borderRadius: "999px",
+                color: statusColor,
+                backgroundColor: alpha(
+                  statusColor,
+                  theme.palette.mode === "dark" ? 0.15 : 0.09
+                ),
+                border: `1px solid ${alpha(statusColor, 0.18)}`,
+                fontWeight: 900,
+                "& .MuiChip-icon": {
+                  color: statusColor,
+                },
+              }}
+            />
+
+            <Typography
+              sx={{
+                color: theme.palette.app.text,
+                fontSize: { xs: "1.2rem", md: "1.45rem" },
+                lineHeight: 1.25,
+                fontWeight: 950,
+                letterSpacing: "-0.3px",
+                textDecoration: isDone ? "line-through" : "none",
+                overflowWrap: "anywhere",
+              }}
+            >
+              {task.title || "Tarea sin título"}
+            </Typography>
+          </Box>
+        </Stack>
+
+        <IconButton
+          onClick={onClose}
+          sx={{
+            position: "absolute",
+            top: 16,
+            right: 16,
+            width: 38,
+            height: 38,
+            borderRadius: "14px",
+            color: theme.palette.app.secondary,
+            backgroundColor: getSoftBackground(theme),
+            border: `1px solid ${theme.palette.app.borderSoft}`,
+            "&:hover": {
+              color: theme.palette.primary.main,
+              backgroundColor: theme.palette.app.primarySoft,
+            },
+          }}
+        >
+          <CloseRoundedIcon />
+        </IconButton>
+      </DialogTitle>
+
+      <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
+
+      <DialogContent sx={{ px: { xs: 2.2, md: 3 }, py: 2.4 }}>
+        <Stack spacing={1.8}>
+          <Box
+            sx={{
+              borderRadius: "18px",
+              p: 1.6,
+              backgroundColor: getSoftBackground(theme),
+              border: `1px solid ${theme.palette.app.borderSoft}`,
+            }}
+          >
+            <Stack direction="row" alignItems="center" spacing={1.2}>
+              <Avatar
+                variant="rounded"
+                sx={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: "14px",
+                  color: projectColor,
+                  backgroundColor: alpha(
+                    projectColor,
+                    theme.palette.mode === "dark" ? 0.16 : 0.1
+                  ),
+                }}
+              >
+                <FolderRoundedIcon />
+              </Avatar>
+
+              <Box sx={{ minWidth: 0 }}>
+                <Typography
+                  sx={{
+                    color: theme.palette.app.secondary,
+                    fontSize: "0.76rem",
+                    fontWeight: 850,
+                  }}
+                >
+                  PROYECTO
+                </Typography>
+
+                <Typography
+                  sx={{
+                    mt: 0.2,
+                    color: theme.palette.app.text,
+                    fontWeight: 900,
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {task.projectName || "Tarea personal"}
+                </Typography>
+              </Box>
+            </Stack>
+          </Box>
+
+          <Box
+            sx={{
+              borderRadius: "18px",
+              p: { xs: 1.6, md: 1.8 },
+              backgroundColor: theme.palette.app.surface,
+              border: `1px solid ${theme.palette.app.borderSoft}`,
+            }}
+          >
+            <Typography
+              sx={{
+                color: theme.palette.app.text,
+                fontSize: "0.82rem",
+                fontWeight: 950,
+                textTransform: "uppercase",
+                letterSpacing: 0.45,
+              }}
+            >
+              Descripción
+            </Typography>
+
+            <Typography
+              sx={{
+                mt: 1,
+                color: task.description
+                  ? theme.palette.app.secondary
+                  : alpha(theme.palette.app.secondary, 0.72),
+                fontSize: "0.95rem",
+                lineHeight: 1.75,
+                fontWeight: 600,
+                whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere",
+              }}
+            >
+              {task.description || "Esta tarea no tiene descripción."}
+            </Typography>
+          </Box>
+        </Stack>
+      </DialogContent>
+
+      <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
+
+      <DialogActions
+        sx={{
+          px: { xs: 2.2, md: 3 },
+          py: 2,
+          justifyContent: "space-between",
+          gap: 1,
+        }}
+      >
+        <Button
+          onClick={onToggleDone}
+          startIcon={isDone ? <RestoreRoundedIcon /> : <CheckCircleRoundedIcon />}
+          sx={{
+            minHeight: 42,
+            px: 1.7,
+            borderRadius: "14px",
+            color: isDone
+              ? theme.palette.warning.main
+              : theme.palette.success.main,
+            backgroundColor: alpha(
+              isDone
+                ? theme.palette.warning.main
+                : theme.palette.success.main,
+              0.1
+            ),
+            fontWeight: 900,
+            textTransform: "none",
+            "&:hover": {
+              backgroundColor: alpha(
+                isDone
+                  ? theme.palette.warning.main
+                  : theme.palette.success.main,
+                0.16
+              ),
+            },
+          }}
+        >
+          {isDone ? "Restaurar" : "Completar"}
+        </Button>
+
+        <Stack direction="row" spacing={1}>
+          <Button
+            onClick={onClose}
+            sx={{
+              minHeight: 42,
+              borderRadius: "14px",
+              color: theme.palette.app.secondary,
+              fontWeight: 850,
+              textTransform: "none",
+            }}
+          >
+            Cerrar
+          </Button>
+
+          <Button
+            variant="contained"
+            startIcon={<EditRoundedIcon />}
+            onClick={onEdit}
+            sx={{
+              minHeight: 42,
+              px: 2,
+              borderRadius: "14px",
+              fontWeight: 900,
+              textTransform: "none",
+              boxShadow: "none",
+            }}
+          >
+            Editar
+          </Button>
+        </Stack>
+      </DialogActions>
+    </Dialog>
   );
 };
 

@@ -56,6 +56,7 @@ import BusinessCenterRoundedIcon from "@mui/icons-material/BusinessCenterRounded
 import CloudUploadRoundedIcon from "@mui/icons-material/CloudUploadRounded";
 import WorkspacesRoundedIcon from "@mui/icons-material/WorkspacesRounded";
 import InfoRoundedIcon from "@mui/icons-material/InfoRounded";
+import KeyRoundedIcon from "@mui/icons-material/KeyRounded";
 import { db, storage } from "../../firebase/firebase";
 import { useAuth } from "../../context/AuthContext";
 
@@ -225,6 +226,7 @@ export default function Proyectos() {
   const [links, setLinks] = useState([]);
   const [databases, setDatabases] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [credentials, setCredentials] = useState([]);
 
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -256,6 +258,7 @@ export default function Proyectos() {
       setLinks([]);
       setDatabases([]);
       setPayments([]);
+      setCredentials([]);
       setLoadingProjects(false);
       return;
     }
@@ -355,6 +358,18 @@ export default function Proyectos() {
       }
     );
 
+    const unsubscribeCredentials = onSnapshot(
+      query(collection(db, "credentials"), where("userId", "==", user.uid)),
+      (snapshot) => {
+        setCredentials(
+          snapshot.docs.map((document) => ({
+            id: document.id,
+            ...document.data(),
+          }))
+        );
+      }
+    );
+
     return () => {
       unsubscribeProjects();
       unsubscribeTasks();
@@ -362,6 +377,7 @@ export default function Proyectos() {
       unsubscribeLinks();
       unsubscribeDatabases();
       unsubscribePayments();
+      unsubscribeCredentials();
     };
   }, [user]);
 
@@ -399,6 +415,7 @@ export default function Proyectos() {
         links: [],
         databases: [],
         payments: [],
+        credentials: [],
       };
     }
 
@@ -412,8 +429,19 @@ export default function Proyectos() {
         (item) => item.projectId === selectedProjectDetail.id
       ),
       payments: payments.filter((item) => item.projectId === selectedProjectDetail.id),
+      credentials: credentials.filter(
+        (item) => item.projectId === selectedProjectDetail.id
+      ),
     };
-  }, [selectedProjectDetail, tasks, notes, links, databases, payments]);
+  }, [
+    selectedProjectDetail,
+    tasks,
+    notes,
+    links,
+    databases,
+    payments,
+    credentials,
+  ]);
 
   const getRelatedCount = (projectId) => {
     const relatedTasks = tasks.filter((item) => item.projectId === projectId).length;
@@ -1960,16 +1988,21 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
 
   if (!project) return null;
 
-  const color = project.color || theme.palette.primary.main;
   const typeInfo = getProjectType(project.projectType);
   const statusColor = getStatusColor(theme, project.status);
+  const sectionColor = theme.palette.primary.main;
+  const itemColor =
+    theme.palette.mode === "dark"
+      ? theme.palette.info.light
+      : theme.palette.info.main;
 
   const total =
     data.tasks.length +
     data.notes.length +
     data.links.length +
     data.databases.length +
-    data.payments.length;
+    data.payments.length +
+    data.credentials.length;
 
   return (
     <Dialog
@@ -2017,6 +2050,7 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
                   backgroundColor: getSoftBackground(theme),
                   color: theme.palette.app.secondary,
                   fontWeight: 850,
+                  border: `1px solid ${theme.palette.app.borderSoft}`,
                   "& .MuiChip-icon": {
                     color: theme.palette.app.secondary,
                   },
@@ -2074,13 +2108,13 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
 
       <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
 
-      <DialogContent sx={{ px: { xs: 2.2, md: 3 }, py: 2.4 }}>
-        <Stack spacing={2.1}>
+      <DialogContent sx={{ px: { xs: 1.6, sm: 2.2, md: 3 }, py: 2.4 }}>
+        <Stack spacing={2.2}>
           {project.description && (
             <Box
               sx={{
                 borderRadius: "18px",
-                p: 1.5,
+                p: { xs: 1.4, md: 1.6 },
                 backgroundColor: getSoftBackground(theme),
                 border: `1px solid ${theme.palette.app.borderSoft}`,
               }}
@@ -2097,49 +2131,93 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
             </Box>
           )}
 
-          <Stack direction="row" flexWrap="wrap" gap={0.9}>
-            <CounterPill
-              label="Tareas"
-              value={data.tasks.length}
-              icon={<FormatListBulletedRoundedIcon />}
-              color={theme.palette.info.main}
-            />
+          <Box>
+            <Typography
+              sx={{
+                mb: 1.1,
+                color: theme.palette.app.text,
+                fontSize: "0.78rem",
+                fontWeight: 950,
+                letterSpacing: 0.65,
+                textTransform: "uppercase",
+              }}
+            >
+              Resumen del proyecto
+            </Typography>
 
-            <CounterPill
-              label="Notas"
-              value={data.notes.length}
-              icon={<NotesRoundedIcon />}
-              color={theme.palette.primary.main}
-            />
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: {
+                  xs: "repeat(2, minmax(0, 1fr))",
+                  sm: "repeat(4, minmax(0, 1fr))",
+                },
+                gap: 1,
+              }}
+            >
+              <CounterPill
+                label="Tareas"
+                value={data.tasks.length}
+                icon={<FormatListBulletedRoundedIcon />}
+              />
+              <CounterPill
+                label="Notas"
+                value={data.notes.length}
+                icon={<NotesRoundedIcon />}
+              />
+              <CounterPill
+                label="Enlaces"
+                value={data.links.length}
+                icon={<LinkRoundedIcon />}
+              />
+              <CounterPill
+                label="Credenciales"
+                value={data.credentials.length}
+                icon={<KeyRoundedIcon />}
+              />
+              <CounterPill
+                label="Bases de datos"
+                value={data.databases.length}
+                icon={<StorageRoundedIcon />}
+              />
+              <CounterPill
+                label="Pagos"
+                value={data.payments.length}
+                icon={<PaymentsRoundedIcon />}
+              />
+              <CounterPill
+                label="Total"
+                value={total}
+                icon={<WorkspacesRoundedIcon />}
+                featured
+              />
+            </Box>
+          </Box>
 
-            <CounterPill
-              label="Enlaces"
-              value={data.links.length}
-              icon={<LinkRoundedIcon />}
-              color={theme.palette.info.main}
-            />
-
-            <CounterPill
-              label="Total"
-              value={total}
-              icon={<StorageRoundedIcon />}
-              color={theme.palette.primary.main}
-            />
-          </Stack>
+          <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
 
           <Box
             sx={{
-              maxHeight: { xs: 430, md: 560 },
-              overflow: "auto",
-              pr: 0.5,
+              maxHeight: { xs: 470, md: 590 },
+              overflowY: "auto",
+              overflowX: "hidden",
+              pr: { xs: 0.25, md: 0.7 },
+              "&::-webkit-scrollbar": {
+                width: 7,
+              },
+              "&::-webkit-scrollbar-thumb": {
+                borderRadius: 999,
+                backgroundColor: alpha(theme.palette.primary.main, 0.22),
+              },
             }}
           >
-            <Stack spacing={2}>
+            <Stack spacing={1.5}>
               <DetailSection
                 title="Tareas"
+                subtitle="Tareas vinculadas a este proyecto"
                 icon={<FormatListBulletedRoundedIcon />}
                 count={data.tasks.length}
-                color={theme.palette.info.main}
+                color={sectionColor}
               >
                 {data.tasks.length === 0 ? (
                   <EmptyDetailText text="No hay tareas asignadas." />
@@ -2150,7 +2228,7 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
                       title={task.title || "Tarea sin título"}
                       subtitle={task.status || "Sin estado"}
                       icon={<FormatListBulletedRoundedIcon />}
-                      color={theme.palette.info.main}
+                      color={itemColor}
                     />
                   ))
                 )}
@@ -2158,9 +2236,10 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
 
               <DetailSection
                 title="Notas"
+                subtitle="Notas y apuntes relacionados"
                 icon={<NotesRoundedIcon />}
                 count={data.notes.length}
-                color={theme.palette.primary.main}
+                color={sectionColor}
               >
                 {data.notes.length === 0 ? (
                   <EmptyDetailText text="No hay notas asignadas." />
@@ -2168,10 +2247,10 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
                   data.notes.map((note) => (
                     <DetailItem
                       key={note.id}
-                      title={note.title || "Sin título"}
+                      title={note.title || "Nota sin título"}
                       subtitle={note.content || "Sin contenido"}
                       icon={<NotesRoundedIcon />}
-                      color={theme.palette.primary.main}
+                      color={itemColor}
                     />
                   ))
                 )}
@@ -2179,9 +2258,10 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
 
               <DetailSection
                 title="Enlaces"
+                subtitle="Sitios web y descargas guardadas"
                 icon={<LinkRoundedIcon />}
                 count={data.links.length}
-                color={theme.palette.info.main}
+                color={sectionColor}
               >
                 {data.links.length === 0 ? (
                   <EmptyDetailText text="No hay enlaces asignados." />
@@ -2192,10 +2272,8 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
                     return (
                       <DetailItem
                         key={link.id}
-                        title={isApp ? "App" : "Web"}
-                        subtitle={[link.url || "Sin enlace", link.notes || null]
-                          .filter(Boolean)
-                          .join(" · ")}
+                        title={link.notes || (isApp ? "Aplicación" : "Sitio web")}
+                        subtitle={link.url || "Sin enlace"}
                         icon={
                           isApp ? (
                             <SmartphoneRoundedIcon />
@@ -2203,11 +2281,50 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
                             <LanguageRoundedIcon />
                           )
                         }
-                        color={
-                          isApp
-                            ? theme.palette.success.main
-                            : theme.palette.info.main
+                        color={itemColor}
+                      />
+                    );
+                  })
+                )}
+              </DetailSection>
+
+              <DetailSection
+                title="Credenciales"
+                subtitle="Accesos de producción y entorno local"
+                icon={<KeyRoundedIcon />}
+                count={data.credentials.length}
+                color={sectionColor}
+              >
+                {data.credentials.length === 0 ? (
+                  <EmptyDetailText text="No hay credenciales asignadas." />
+                ) : (
+                  data.credentials.map((credential) => {
+                    const productionData = [
+                      credential.production?.email
+                        ? `Producción: ${credential.production.email}`
+                        : null,
+                      credential.production?.url
+                        ? credential.production.url
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ");
+
+                    const localData = credential.local?.email
+                      ? `Local: ${credential.local.email}`
+                      : null;
+
+                    return (
+                      <DetailItem
+                        key={credential.id}
+                        title={credential.notes || "Credenciales del proyecto"}
+                        subtitle={
+                          [productionData, localData]
+                            .filter(Boolean)
+                            .join(" · ") || "Accesos guardados"
                         }
+                        icon={<KeyRoundedIcon />}
+                        color={itemColor}
                       />
                     );
                   })
@@ -2216,12 +2333,13 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
 
               <DetailSection
                 title="Base de datos"
+                subtitle="Consolas y recursos de Firebase"
                 icon={<StorageRoundedIcon />}
                 count={data.databases.length}
-                color={theme.palette.warning.main}
+                color={sectionColor}
               >
                 {data.databases.length === 0 ? (
-                  <EmptyDetailText text="No hay enlaces de Firebase asignados." />
+                  <EmptyDetailText text="No hay bases de datos asignadas." />
                 ) : (
                   data.databases.map((database) => (
                     <DetailItem
@@ -2229,7 +2347,7 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
                       title="Firebase Console"
                       subtitle={database.firebaseUrl || "Sin enlace"}
                       icon={<StorageRoundedIcon />}
-                      color={theme.palette.warning.main}
+                      color={itemColor}
                     />
                   ))
                 )}
@@ -2237,9 +2355,10 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
 
               <DetailSection
                 title="Pagos"
+                subtitle="Importes y registros vinculados"
                 icon={<PaymentsRoundedIcon />}
                 count={data.payments.length}
-                color={theme.palette.success.main}
+                color={sectionColor}
               >
                 {data.payments.length === 0 ? (
                   <EmptyDetailText text="No hay pagos asignados." />
@@ -2252,7 +2371,7 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
                       }${Number(payment.totalAmount || 0).toLocaleString("es-AR")}`}
                       subtitle={payment.notes || "Sin notas"}
                       icon={<PaymentsRoundedIcon />}
-                      color={theme.palette.success.main}
+                      color={itemColor}
                     />
                   ))
                 )}
@@ -2284,81 +2403,186 @@ function ProjectDetailDialog({ open, project, data, onClose }) {
   );
 }
 
-function CounterPill({ label, value, icon, color }) {
+function CounterPill({ label, value, icon, featured = false }) {
   const theme = useTheme();
+  const color = theme.palette.primary.main;
 
   return (
-    <Chip
-      icon={icon}
-      label={`${value} ${label}`}
+    <Box
       sx={{
-        height: 34,
-        borderRadius: "999px",
-        backgroundColor: alpha(color, theme.palette.mode === "dark" ? 0.16 : 0.1),
-        color,
-        fontWeight: 900,
-        border: `1px solid ${alpha(
+        minWidth: 0,
+        minHeight: 66,
+        px: 1.15,
+        py: 1,
+        borderRadius: "16px",
+        border: "1px solid",
+        borderColor: alpha(color, featured ? 0.3 : 0.16),
+        backgroundColor: alpha(
           color,
-          theme.palette.mode === "dark" ? 0.25 : 0.16
-        )}`,
-        "& .MuiChip-icon": {
-          color,
-        },
+          theme.palette.mode === "dark"
+            ? featured
+              ? 0.18
+              : 0.1
+            : featured
+            ? 0.12
+            : 0.055
+        ),
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
       }}
-    />
+    >
+      <Avatar
+        variant="rounded"
+        sx={{
+          width: 34,
+          height: 34,
+          flexShrink: 0,
+          borderRadius: "11px",
+          color,
+          backgroundColor: alpha(
+            color,
+            theme.palette.mode === "dark" ? 0.2 : 0.1
+          ),
+          "& svg": {
+            fontSize: 19,
+          },
+        }}
+      >
+        {icon}
+      </Avatar>
+
+      <Box sx={{ minWidth: 0 }}>
+        <Typography
+          sx={{
+            color: theme.palette.app.text,
+            fontSize: "1.05rem",
+            lineHeight: 1,
+            fontWeight: 950,
+          }}
+        >
+          {value}
+        </Typography>
+
+        <Typography
+          noWrap
+          sx={{
+            mt: 0.45,
+            color: theme.palette.app.secondary,
+            fontSize: "0.7rem",
+            fontWeight: 800,
+          }}
+        >
+          {label}
+        </Typography>
+      </Box>
+    </Box>
   );
 }
 
-function DetailSection({ title, icon, count, color, children }) {
+function DetailSection({ title, subtitle, icon, count, color, children }) {
   const theme = useTheme();
 
   return (
-    <Box>
-      <Stack direction="row" alignItems="center" spacing={1.2} sx={{ mb: 1.2 }}>
+    <Box
+      sx={{
+        borderRadius: "20px",
+        border: `1px solid ${theme.palette.app.borderSoft}`,
+        backgroundColor: getSoftBackground(theme),
+        overflow: "hidden",
+      }}
+    >
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={1.2}
+        sx={{
+          px: { xs: 1.3, md: 1.55 },
+          py: 1.35,
+          borderBottom: `1px solid ${theme.palette.app.borderSoft}`,
+          backgroundColor: alpha(
+            color,
+            theme.palette.mode === "dark" ? 0.09 : 0.045
+          ),
+        }}
+      >
         <Avatar
           variant="rounded"
           sx={{
             width: 42,
             height: 42,
-            borderRadius: "15px",
-            backgroundColor: alpha(color, theme.palette.mode === "dark" ? 0.16 : 0.1),
+            flexShrink: 0,
+            borderRadius: "14px",
+            backgroundColor: alpha(
+              color,
+              theme.palette.mode === "dark" ? 0.18 : 0.1
+            ),
             color,
+            "& svg": {
+              fontSize: 22,
+            },
           }}
         >
           {icon}
         </Avatar>
 
-        <Box sx={{ flex: 1 }}>
-          <Typography sx={{ color: theme.palette.app.text, fontWeight: 950 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography
+            sx={{
+              color: theme.palette.app.text,
+              fontSize: "0.96rem",
+              lineHeight: 1.2,
+              fontWeight: 950,
+            }}
+          >
             {title}
           </Typography>
 
           <Typography
+            noWrap
             sx={{
+              mt: 0.3,
               color: theme.palette.app.secondary,
-              fontSize: "0.78rem",
+              fontSize: "0.75rem",
               fontWeight: 650,
             }}
           >
-            Elementos vinculados al proyecto
+            {subtitle}
           </Typography>
         </Box>
 
-        <Chip
-          size="small"
-          label={count}
+        <Box
           sx={{
-            height: 27,
             minWidth: 34,
+            height: 28,
+            px: 1,
+            flexShrink: 0,
             borderRadius: "999px",
-            fontWeight: 950,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             color,
-            backgroundColor: alpha(color, theme.palette.mode === "dark" ? 0.15 : 0.09),
+            backgroundColor: alpha(
+              color,
+              theme.palette.mode === "dark" ? 0.18 : 0.1
+            ),
+            border: `1px solid ${alpha(color, 0.16)}`,
+            fontSize: "0.78rem",
+            fontWeight: 950,
           }}
-        />
+        >
+          {count}
+        </Box>
       </Stack>
 
-      <Stack spacing={1}>{children}</Stack>
+      <Stack
+        spacing={0.85}
+        sx={{
+          p: { xs: 1, md: 1.2 },
+        }}
+      >
+        {children}
+      </Stack>
     </Box>
   );
 }
@@ -2370,21 +2594,37 @@ function DetailItem({ title, subtitle, icon, color }) {
     <Card
       elevation={0}
       sx={{
-        borderRadius: "18px",
-        backgroundColor: getSoftBackground(theme),
+        borderRadius: "15px",
+        backgroundColor: theme.palette.app.surface,
         border: `1px solid ${theme.palette.app.borderSoft}`,
         boxShadow: "none",
+        transition: "0.16s ease",
+        "&:hover": {
+          borderColor: alpha(color, 0.25),
+        },
       }}
     >
-      <Stack direction="row" alignItems="flex-start" spacing={1.4} sx={{ p: 1.4 }}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={1.15}
+        sx={{ p: { xs: 1.1, md: 1.2 } }}
+      >
         <Avatar
           variant="rounded"
           sx={{
-            width: 40,
-            height: 40,
-            borderRadius: "14px",
-            backgroundColor: alpha(color, theme.palette.mode === "dark" ? 0.16 : 0.1),
+            width: 38,
+            height: 38,
+            flexShrink: 0,
+            borderRadius: "12px",
+            backgroundColor: alpha(
+              color,
+              theme.palette.mode === "dark" ? 0.15 : 0.075
+            ),
             color,
+            "& svg": {
+              fontSize: 20,
+            },
           }}
         >
           {icon}
@@ -2394,8 +2634,10 @@ function DetailItem({ title, subtitle, icon, color }) {
           <Typography
             sx={{
               color: theme.palette.app.text,
+              fontSize: "0.88rem",
               fontWeight: 900,
               lineHeight: 1.35,
+              overflowWrap: "anywhere",
             }}
           >
             {title}
@@ -2404,12 +2646,12 @@ function DetailItem({ title, subtitle, icon, color }) {
           {subtitle && (
             <Typography
               sx={{
-                mt: 0.4,
+                mt: 0.3,
                 color: theme.palette.app.secondary,
                 fontWeight: 600,
-                fontSize: "0.86rem",
+                fontSize: "0.8rem",
                 lineHeight: 1.45,
-                wordBreak: "break-word",
+                overflowWrap: "anywhere",
               }}
             >
               {subtitle}
@@ -2427,14 +2669,23 @@ function EmptyDetailText({ text }) {
   return (
     <Box
       sx={{
-        borderRadius: "18px",
+        minHeight: 54,
+        borderRadius: "14px",
         border: `1px dashed ${theme.palette.app.borderSoft}`,
-        backgroundColor: getSoftBackground(theme),
-        px: 1.5,
-        py: 1.4,
+        backgroundColor: theme.palette.app.surface,
+        px: 1.35,
+        py: 1.15,
+        display: "flex",
+        alignItems: "center",
       }}
     >
-      <Typography sx={{ color: theme.palette.app.secondary, fontWeight: 700 }}>
+      <Typography
+        sx={{
+          color: theme.palette.app.secondary,
+          fontSize: "0.82rem",
+          fontWeight: 700,
+        }}
+      >
         {text}
       </Typography>
     </Box>

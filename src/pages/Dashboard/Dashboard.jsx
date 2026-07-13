@@ -38,6 +38,7 @@ import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
 import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
 import LinkRoundedIcon from "@mui/icons-material/LinkRounded";
+import VpnKeyRoundedIcon from "@mui/icons-material/VpnKeyRounded";
 import CodeRoundedIcon from "@mui/icons-material/CodeRounded";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
@@ -57,6 +58,7 @@ import Notas from "../../components/Notas/Notas";
 import Informes from "../../components/Informes/Informes";
 import DataBase from "../../components/DataBase/DataBase";
 import Enlaces from "../../components/Enlaces/Enlaces";
+import Credenciales from "../../components/Credenciales/Credenciales";
 import Config from "../../components/Config/Config";
 import { useThemeMode } from "../../context/ThemeModeContext";
 import { useAuth } from "../../context/AuthContext";
@@ -113,7 +115,13 @@ const sections = [
     title: "Enlaces",
     description: "Sitios web, aplicaciones y recursos de tus proyectos",
     icon: <LinkRoundedIcon />,
-},
+  },
+  {
+    id: "credenciales",
+    title: "Credenciales",
+    description: "Accesos y datos sensibles asociados a tus proyectos",
+    icon: <VpnKeyRoundedIcon />,
+  },
   {
     id: "configuracion",
     title: "Configuración",
@@ -385,8 +393,11 @@ const Dashboard = () => {
       case "database":
         return <DataBase />;
 
-    case "enlaces":
-      return <Enlaces />;
+      case "enlaces":
+        return <Enlaces />;
+
+      case "credenciales":
+        return <Credenciales />;
 
       case "configuracion":
         return <Config />;
