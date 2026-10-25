@@ -1,2102 +1,1045 @@
-// Importaciones:
-import { useEffect, useMemo, useState } from "react";
+//Tareas:
+import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   addDoc,
   collection,
   deleteDoc,
   doc,
-  onSnapshot,
-  query,
   serverTimestamp,
   updateDoc,
-  where,
+  writeBatch,
 } from "firebase/firestore";
-import {
-  Alert,
-  Avatar,
-  Box,
-  Button,
-  Card,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  FormControl,
-  IconButton,
-  InputLabel,
-  MenuItem,
-  Select,
-  Stack,
-  TextField,
-  Tooltip,
-  Typography,
-} from "@mui/material";
-import { alpha, keyframes, useTheme } from "@mui/material/styles";
+import { Box, InputBase, Typography } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 import {
   DndContext,
-  PointerSensor,
+  DragOverlay,
+  MouseSensor,
+  TouchSensor,
   closestCenter,
+  closestCorners,
+  useDroppable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
 import {
   SortableContext,
   arrayMove,
-  useSortable,
+  rectSortingStrategy,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import AssignmentRoundedIcon from "@mui/icons-material/AssignmentRounded";
-import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
-import DeleteRoundedIcon from "@mui/icons-material/DeleteRounded";
-import EditRoundedIcon from "@mui/icons-material/EditRounded";
-import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
-import PendingActionsRoundedIcon from "@mui/icons-material/PendingActionsRounded";
-import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
-import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
-import PauseCircleRoundedIcon from "@mui/icons-material/PauseCircleRounded";
-import RestoreRoundedIcon from "@mui/icons-material/RestoreRounded";
-import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
+import EventBusyRoundedIcon from "@mui/icons-material/EventBusyRounded";
+import FilterAltOffRoundedIcon from "@mui/icons-material/FilterAltOffRounded";
+import SearchOffRoundedIcon from "@mui/icons-material/SearchOffRounded";
 import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
-import DragIndicatorRoundedIcon from "@mui/icons-material/DragIndicatorRounded";
+import ViewKanbanRoundedIcon from "@mui/icons-material/ViewKanbanRounded";
+import ViewListRoundedIcon from "@mui/icons-material/ViewListRounded";
 import { db } from "../../firebase/firebase";
 import { useAuth } from "../../context/AuthContext";
+import useUserCollection, { byName } from "../../shared/hooks/useUserCollection";
+import { projectFields } from "../../shared/utils";
+import {
+  DeleteDialog,
+  EmptyState,
+  FilterBar,
+  FilterSelect,
+  PageAlert,
+  PageHeader,
+  PageShell,
+  PrimaryButton,
+  SearchField,
+  Section,
+  Stack,
+  Toast,
+  getSoftBackground,
+  matchesProjectFilter,
+  projectFilterOptions,
+  softTint,
+  useToast,
+} from "../../shared/ui";
+import TaskCard, { TaskCardView } from "./TaskCard";
+import { TaskDetailDialog, TaskFormDialog } from "./TaskDialogs";
+import {
+  BOARD_COLUMNS,
+  DEFAULT_STATUS,
+  DONE_PREVIEW,
+  getChecklist,
+  getChecklistProgress,
+  getStatusColor,
+  getStatusLabel,
+  getStatusRank,
+  isOverdue,
+  matchesTaskSearch,
+  sortTasks,
+  textToChecklistItems,
+} from "./taskUtils";
 
-//JSX:
-// Animaciones:
-const fadeInUp = keyframes`
-  from {
-    opacity: 0;
-    transform: translateY(10px);
+const EMPTY_FORM = {
+  title: "",
+  description: "",
+  status: DEFAULT_STATUS,
+  projectId: "",
+  priority: "",
+  dueDate: "",
+  checklist: [],
+  draft: "",
+};
+const VIEW_KEY = "codedesk_tasks_view";
+const LIST_FILTERS = [
+  { value: "activas", label: "Activas" },
+  { value: "todas", label: "Todas" },
+  { value: "completada", label: "Completadas" },
+];
+
+const taskRef = (id) => doc(db, "tasks", id);
+
+const uniqueOrders = (values) =>
+  [...values]
+    .sort((a, b) => a - b)
+    .reduce(
+      (acc, value) => [...acc, acc.length && value <= acc.at(-1) ? acc.at(-1) + 0.001 : value],
+      [],
+    );
+const readView = () => {
+  try {
+    return localStorage.getItem(VIEW_KEY) || "board";
+  } catch {
+    return "board";
   }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-`;
-
-const softFadeIn = keyframes`
-  from {
-    opacity: 0;
-    transform: scale(0.985);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-`;
-
-const getFadeInSx = (delay = 0) => ({
-  opacity: 0,
-  animation: `${fadeInUp} 420ms ease forwards`,
-  animationDelay: `${delay}ms`,
-});
-
-const getSoftFadeSx = (delay = 0) => ({
-  opacity: 0,
-  animation: `${softFadeIn} 380ms ease forwards`,
-  animationDelay: `${delay}ms`,
-});
-
-// Constantes:
-const STATUSES = ["pendiente", "en progreso", "completada", "pausada"];
-
-const statusIcons = {
-  pendiente: <PendingActionsRoundedIcon />,
-  "en progreso": <AccessTimeRoundedIcon />,
-  completada: <CheckCircleRoundedIcon />,
-  pausada: <PauseCircleRoundedIcon />,
-};
-
-const getStatusLabel = (status) => {
-  if (status === "pendiente") return "Pendiente";
-  if (status === "en progreso") return "En progreso";
-  if (status === "completada") return "Completada";
-  if (status === "pausada") return "Pausada";
-
-  return "Pendiente";
-};
-
-const getStatusIcon = (status) => {
-  return statusIcons[status] || statusIcons.pendiente;
-};
-
-const getStatusColor = (theme, status) => {
-  if (status === "pendiente") return theme.palette.warning.main;
-  if (status === "en progreso") return theme.palette.info.main;
-  if (status === "completada") return theme.palette.success.main;
-  if (status === "pausada") return theme.palette.app.secondary;
-
-  return theme.palette.primary.main;
-};
-
-const getTaskDateValue = (task) => {
-  return task?.createdAt?.seconds || task?.updatedAt?.seconds || 0;
-};
-
-const sortTasks = (a, b) => {
-  const orderA = a.order ?? 999999;
-  const orderB = b.order ?? 999999;
-
-  if (orderA !== orderB) return orderA - orderB;
-
-  return getTaskDateValue(b) - getTaskDateValue(a);
-};
-
-const getCardStyles = (theme) => ({
-  borderRadius: "24px",
-  border: `1px solid ${theme.palette.app.borderSoft}`,
-  backgroundColor: theme.palette.app.surface,
-  backgroundImage: "none",
-  boxShadow:
-    theme.palette.mode === "dark"
-      ? "0 18px 48px rgba(0, 0, 0, 0.16)"
-      : "0 16px 42px rgba(15, 23, 42, 0.045)",
-});
-
-const getSoftBackground = (theme) => {
-  return theme.palette.mode === "dark"
-    ? alpha("#FFFFFF", 0.035)
-    : alpha("#0F172A", 0.025);
-};
-
-const getProjectColor = (theme, item) => {
-  return item?.projectColor || item?.color || theme.palette.primary.main;
 };
 
 const Tareas = () => {
   const theme = useTheme();
   const { user } = useAuth();
 
-  const [tasks, setTasks] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [tasks, loading, loadError, setTasks] = useUserCollection("tasks", {
+    sort: sortTasks,
+    errorMessage: "No se pudieron cargar las tareas.",
+  });
+  const [projects] = useUserCollection("projects", { sort: byName });
 
-  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
-  const [taskDetailOpen, setTaskDetailOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
+  const [view, setView] = useState(readView);
+  const [form, setForm] = useState(EMPTY_FORM);
   const [editingTask, setEditingTask] = useState(null);
-  const [selectedTask, setSelectedTask] = useState(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [taskToDelete, setTaskToDelete] = useState(null);
 
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [status, setStatus] = useState("pendiente");
-  const [projectId, setProjectId] = useState("");
-
-  const [filterStatus, setFilterStatus] = useState("noCompletadas");
+  const [search, setSearch] = useState("");
   const [filterProject, setFilterProject] = useState("todos");
+  const [onlyOverdue, setOnlyOverdue] = useState(false);
+  const [listFilter, setListFilter] = useState("activas");
+  const [showAllDone, setShowAllDone] = useState(false);
+
+  const [drag, setDrag] = useState(null);
 
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [formError, setFormError] = useState("");
   const [pageError, setPageError] = useState("");
+  const [toast, showToast, closeToast] = useToast();
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 7,
-      },
-    })
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),
+  );
+  const setField = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+
+  const changeView = (next) => {
+    setView(next);
+    try {
+      localStorage.setItem(VIEW_KEY, next);
+    } catch {
+    }
+  };
+
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId) || null;
+  const overdueCount = useMemo(() => tasks.filter(isOverdue).length, [tasks]);
+
+  const query = search.trim().toLowerCase();
+  const visibleTasks = useMemo(
+    () =>
+      tasks.filter(
+        (task) =>
+          matchesProjectFilter(task, filterProject) &&
+          matchesTaskSearch(task, query) &&
+          (!onlyOverdue || isOverdue(task)),
+      ),
+    [tasks, filterProject, query, onlyOverdue],
+  );
+  const hasFilters = filterProject !== "todos" || Boolean(query) || onlyOverdue;
+  const resetFilters = () => {
+    setFilterProject("todos");
+    setSearch("");
+    setOnlyOverdue(false);
+  };
+
+  const listTasks = useMemo(
+    () =>
+      visibleTasks
+        .filter(
+          (task) =>
+            listFilter === "todas" ||
+            (listFilter === "activas" ? task.status !== "completada" : task.status === listFilter),
+        )
+        .sort((a, b) => getStatusRank(a.status) - getStatusRank(b.status) || sortTasks(a, b)),
+    [visibleTasks, listFilter],
   );
 
-  useEffect(() => {
-    if (!user?.uid) {
-      setTasks([]);
-      setProjects([]);
-      setLoading(false);
-      return;
-    }
-
-    const projectsQuery = query(
-      collection(db, "projects"),
-      where("userId", "==", user.uid)
-    );
-
-    const tasksQuery = query(
-      collection(db, "tasks"),
-      where("userId", "==", user.uid)
-    );
-
-    const unsubscribeProjects = onSnapshot(
-      projectsQuery,
-      (snapshot) => {
-        const data = snapshot.docs
-          .map((document) => ({
-            id: document.id,
-            ...document.data(),
-          }))
-          .sort((a, b) =>
-            String(a.name || "").localeCompare(String(b.name || ""))
-          );
-
-        setProjects(data);
-      },
-      (error) => {
-        console.error(error);
-        setPageError("No se pudieron cargar los proyectos.");
-      }
-    );
-
-    const unsubscribeTasks = onSnapshot(
-      tasksQuery,
-      (snapshot) => {
-        const data = snapshot.docs
-          .map((document) => ({
-            id: document.id,
-            ...document.data(),
-          }))
-          .sort(sortTasks);
-
-        setTasks(data);
-        setLoading(false);
-      },
-      (error) => {
-        console.error(error);
-        setTasks([]);
-        setLoading(false);
-        setPageError("No se pudieron cargar las tareas.");
-      }
-    );
-
-    return () => {
-      unsubscribeProjects();
-      unsubscribeTasks();
-    };
-  }, [user]);
-
-  const stats = useMemo(() => {
-    const pending = tasks.filter((task) => task.status === "pendiente").length;
-    const inProgress = tasks.filter(
-      (task) => task.status === "en progreso"
-    ).length;
-    const completed = tasks.filter(
-      (task) => task.status === "completada"
-    ).length;
-    const paused = tasks.filter((task) => task.status === "pausada").length;
-
-    const active = pending + inProgress;
-    const activePercent =
-      active > 0 ? Math.round((inProgress / active) * 100) : 0;
-
-    return {
-      total: tasks.length,
-      pending,
-      inProgress,
-      completed,
-      paused,
-      active,
-      activePercent,
-    };
-  }, [tasks]);
-
-  const selectedProject = useMemo(() => {
-    return projects.find((project) => project.id === projectId) || null;
-  }, [projects, projectId]);
-
-  const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
-      const matchesStatus =
-        filterStatus === "todas"
-          ? true
-          : filterStatus === "noCompletadas"
-          ? task.status !== "completada"
-          : task.status === filterStatus;
-
-      const matchesProject =
-        filterProject === "todos"
-          ? true
-          : filterProject === "sinProyecto"
-          ? !task.projectId
-          : task.projectId === filterProject;
-
-      return matchesStatus && matchesProject;
-    });
-  }, [tasks, filterStatus, filterProject]);
-
-  const resetForm = () => {
-    setEditingTask(null);
-    setTitle("");
-    setDescription("");
-    setStatus("pendiente");
-    setProjectId("");
-    setPageError("");
+  const getEdgeOrder = (edge) => {
+    const orders = tasks.map((task) => task.order ?? 0);
+    if (!orders.length) return 1;
+    return edge === "first" ? Math.min(...orders) - 1 : Math.max(...orders) + 1;
   };
 
-  const openCreateDialog = () => {
-    resetForm();
-    setTaskDialogOpen(true);
-  };
-
-  const openEditDialog = (task) => {
+  // ---- Formulario ----
+  const openForm = (task = null) => {
     setEditingTask(task);
-    setTitle(task.title || "");
-    setDescription(task.description || "");
-    setStatus(task.status || "pendiente");
-    setProjectId(task.projectId || "");
-    setPageError("");
-    setTaskDialogOpen(true);
-  };
-
-  const closeTaskDialog = () => {
-    if (saving) return;
-    resetForm();
-    setTaskDialogOpen(false);
-  };
-
-  const openTaskDetail = (task) => {
-    setSelectedTask(task);
-    setTaskDetailOpen(true);
-  };
-
-  const closeTaskDetail = () => {
-    setSelectedTask(null);
-    setTaskDetailOpen(false);
-  };
-
-  const openDeleteDialog = (task) => {
-    setTaskToDelete(task);
-    setDeleteDialogOpen(true);
-  };
-
-  const closeDeleteDialog = () => {
-    setTaskToDelete(null);
-    setDeleteDialogOpen(false);
-  };
-
-  const moveExistingTasksDown = async () => {
-    const updates = tasks.map((task) =>
-      updateDoc(doc(db, "tasks", task.id), {
-        order: (task.order ?? 0) + 1,
-        updatedAt: serverTimestamp(),
-      })
+    setForm(
+      task
+        ? {
+            ...EMPTY_FORM,
+            title: task.title || "",
+            description: task.description || "",
+            status: task.status || DEFAULT_STATUS,
+            projectId: task.projectId || "",
+            priority: task.priority || "",
+            dueDate: task.dueDate || "",
+            checklist: getChecklist(task),
+          }
+        : {
+            ...EMPTY_FORM,
+            projectId: projects.some((p) => p.id === filterProject) ? filterProject : "",
+          },
     );
-
-    await Promise.all(updates);
+    setFormError("");
+    setFormOpen(true);
   };
+
+  const closeForm = () => {
+    if (saving) return;
+    setFormOpen(false);
+    setEditingTask(null);
+  };
+
+  const createTask = (data) =>
+    addDoc(collection(db, "tasks"), {
+      description: "",
+      priority: null,
+      dueDate: null,
+      checklist: [],
+      ...data,
+      status: DEFAULT_STATUS,
+      userId: user.uid,
+      order: getEdgeOrder("first"),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
 
   const handleSaveTask = async (event) => {
     event?.preventDefault();
 
-    if (!title.trim()) {
-      setPageError("La tarea necesita un título.");
+    const checklist = [
+      ...form.checklist
+        .map((item) => ({ ...item, text: String(item.text || "").trim() }))
+        .filter((item) => item.text),
+      ...textToChecklistItems(form.draft),
+    ];
+    const project = projects.find((item) => item.id === form.projectId) || null;
+
+    const title =
+      form.title.trim() ||
+      (checklist.length ? (project ? `Tareas de ${project.name}` : "Lista de tareas") : "");
+
+    if (!title) {
+      setFormError("La tarea necesita un título o al menos un ítem en el checklist.");
       return;
     }
 
+    const payload = {
+      title,
+      description: form.description.trim(),
+      priority: form.priority || null,
+      dueDate: form.dueDate || null,
+      checklist,
+      ...projectFields(project),
+      updatedAt: serverTimestamp(),
+    };
+
     try {
       setSaving(true);
-      setPageError("");
-
-      const selectedProjectData = projects.find(
-        (project) => project.id === projectId
-      );
-
-      const payload = {
-        title: title.trim(),
-        description: description.trim(),
-        status,
-        projectId: projectId || null,
-        projectName: selectedProjectData?.name || null,
-        projectColor: selectedProjectData?.color || null,
-        projectLogoUrl: selectedProjectData?.logoUrl || null,
-        updatedAt: serverTimestamp(),
-      };
-
-      if (editingTask) {
-        await updateDoc(doc(db, "tasks", editingTask.id), payload);
-      } else {
-        await moveExistingTasksDown();
-
-        await addDoc(collection(db, "tasks"), {
-          ...payload,
-          userId: user.uid,
-          order: 1,
-          createdAt: serverTimestamp(),
-        });
-      }
-
-      closeTaskDialog();
+      setFormError("");
+      if (editingTask)
+        await updateDoc(taskRef(editingTask.id), { ...payload, status: form.status });
+      else await createTask(payload);
+      setFormOpen(false);
+      setEditingTask(null);
+      showToast(editingTask ? "Tarea actualizada." : "Tarea creada.");
     } catch (error) {
       console.error(error);
-      setPageError("No se pudo guardar la tarea.");
+      setFormError("No se pudo guardar la tarea.");
     } finally {
       setSaving(false);
     }
   };
 
-  const toggleDone = async (task) => {
+  const quickAdd = async (text) => {
+    const project = projects.find((item) => item.id === filterProject) || null;
     try {
-      const isDone = task.status === "completada";
-
-      if (isDone) {
-        await updateDoc(doc(db, "tasks", task.id), {
-          status: "pendiente",
-          updatedAt: serverTimestamp(),
-        });
-
-        return;
-      }
-
-      const maxOrder =
-        tasks.length > 0 ? Math.max(...tasks.map((item) => item.order ?? 0)) : 0;
-
-      await updateDoc(doc(db, "tasks", task.id), {
-        status: "completada",
-        order: maxOrder + 1,
-        updatedAt: serverTimestamp(),
-      });
+      await createTask({ title: text.trim(), ...projectFields(project) });
     } catch (error) {
       console.error(error);
-      setPageError("No se pudo actualizar la tarea.");
+      setPageError("No se pudo crear la tarea.");
     }
+  };
+
+  // ---- Acciones ----
+  const updateTask = async (task, changes, errorMessage = "No se pudo actualizar la tarea.") => {
+    setTasks((current) =>
+      current.map((item) => (item.id === task.id ? { ...item, ...changes } : item)),
+    );
+
+    try {
+      await updateDoc(taskRef(task.id), { ...changes, updatedAt: serverTimestamp() });
+    } catch (error) {
+      console.error(error);
+      setPageError(errorMessage);
+    }
+  };
+
+  const setStatus = (task, status) =>
+    updateTask(task, {
+      status,
+      ...(status !== task.status && { order: getEdgeOrder("first") }),
+    });
+
+  const toggleDone = (task) =>
+    setStatus(task, task.status === "completada" ? DEFAULT_STATUS : "completada");
+
+  const toggleChecklistItem = (task, itemId) => {
+    const checklist = getChecklist(task).map((item) =>
+      item.id === itemId ? { ...item, done: !item.done } : item,
+    );
+    const { allDone } = getChecklistProgress(checklist);
+    const changes = { checklist };
+
+    if (allDone && task.status !== "completada") {
+      Object.assign(changes, { status: "completada", order: getEdgeOrder("first") });
+      showToast(`"${task.title}" se completó.`, {
+        actionLabel: "Deshacer",
+        onAction: () => updateTask(task, { status: task.status, order: task.order ?? 0 }),
+        duration: 5000,
+      });
+    } else if (!allDone && task.status === "completada") {
+      changes.status = DEFAULT_STATUS;
+    }
+
+    updateTask(task, changes, "No se pudo actualizar el checklist.");
+  };
+
+  const addChecklistItems = (task, text) => {
+    const items = textToChecklistItems(text);
+    if (!items.length) return;
+    updateTask(
+      task,
+      { checklist: [...getChecklist(task), ...items] },
+      "No se pudo agregar el ítem.",
+    );
   };
 
   const confirmDeleteTask = async () => {
     if (!taskToDelete?.id) return;
 
     try {
-      await deleteDoc(doc(db, "tasks", taskToDelete.id));
-      closeDeleteDialog();
+      setDeleting(true);
+      await deleteDoc(taskRef(taskToDelete.id));
+      if (selectedTaskId === taskToDelete.id) setSelectedTaskId(null);
+      setTaskToDelete(null);
     } catch (error) {
       console.error(error);
       setPageError("No se pudo eliminar la tarea.");
+    } finally {
+      setDeleting(false);
     }
   };
 
-  const handleDragEnd = async (event) => {
-    const { active, over } = event;
-
-    if (!over || active.id === over.id) return;
-
-    const oldIndex = filteredTasks.findIndex((task) => task.id === active.id);
-    const newIndex = filteredTasks.findIndex((task) => task.id === over.id);
-
-    if (oldIndex < 0 || newIndex < 0) return;
-
-    const reorderedVisibleTasks = arrayMove(filteredTasks, oldIndex, newIndex);
-    const visibleIds = new Set(filteredTasks.map((task) => task.id));
-
-    let visibleIndex = 0;
-
-    const reorderedAllTasks = tasks.map((task) => {
-      if (!visibleIds.has(task.id)) return task;
-
-      const nextTask = reorderedVisibleTasks[visibleIndex];
-      visibleIndex += 1;
-
-      return nextTask;
-    });
-
-    setTasks(reorderedAllTasks);
-
+  const persist = async (changed) => {
+    if (!changed.length) return;
+    const byId = new Map(changed.map((item) => [item.id, item]));
+    setTasks((current) =>
+      current.map((task) => (byId.has(task.id) ? { ...task, ...byId.get(task.id) } : task)),
+    );
     try {
-      const updates = reorderedAllTasks.map((task, index) =>
-        updateDoc(doc(db, "tasks", task.id), {
-          order: index + 1,
-          updatedAt: serverTimestamp(),
-        })
+      const batch = writeBatch(db);
+      changed.forEach(({ id, ...fields }) =>
+        batch.update(taskRef(id), { ...fields, updatedAt: serverTimestamp() }),
       );
-
-      await Promise.all(updates);
+      await batch.commit();
     } catch (error) {
       console.error(error);
       setPageError("No se pudo guardar el nuevo orden.");
     }
   };
 
-  return (
-    <Box
-      sx={{
-        width: "100%",
-        maxWidth: 1280,
-        mx: "auto",
-        pb: { xs: 4, md: 6 },
-      }}
-    >
-      <Stack spacing={{ xs: 2, md: 2.4 }}>
-        {!loading && (
-          <>
-            <Box sx={getFadeInSx(0)}>
-              <PageHeader
-                stats={stats}
-                projectsCount={projects.length}
-                onCreate={openCreateDialog}
-              />
-            </Box>
+  // ---- Lista: reordenar ----
+  const handleListDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return;
+    const oldIndex = listTasks.findIndex((task) => task.id === active.id);
+    const newIndex = listTasks.findIndex((task) => task.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    if (listTasks[oldIndex].status !== listTasks[newIndex].status) return;
 
-            {pageError && (
-              <Alert
-                severity="error"
-                sx={{
-                  ...getFadeInSx(40),
-                  borderRadius: "18px",
-                  border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`,
-                  fontWeight: 700,
-                }}
-              >
-                {pageError}
-              </Alert>
-            )}
+    const moved = arrayMove(listTasks, oldIndex, newIndex);
+    const pool = uniqueOrders(listTasks.map((task) => task.order ?? 0));
+    persist(
+      moved
+        .map((task, index) => ({ id: task.id, order: pool[index] }))
+        .filter((item, index) => item.order !== (moved[index].order ?? 0)),
+    );
+  };
 
-            <Box sx={getFadeInSx(70)}>
-              <StatsGrid stats={stats} />
-            </Box>
+  // ---- Tablero: arrastrar dentro de una columna o entre columnas ----
+  const boardTasks = drag?.tasks || visibleTasks;
+  const columnTasks = (status) =>
+    boardTasks.filter((task) => task.status === status).sort(sortTasks);
 
-            <Box sx={getFadeInSx(140)}>
-              <FiltersPanel
-                filterStatus={filterStatus}
-                setFilterStatus={setFilterStatus}
-                filterProject={filterProject}
-                setFilterProject={setFilterProject}
-                projects={projects}
-                visibleCount={filteredTasks.length}
-                totalCount={tasks.length}
-              />
-            </Box>
+  const handleDragStart = ({ active }) => setDrag({ activeId: active.id, tasks: visibleTasks });
 
-            <Box sx={getFadeInSx(210)}>
-              {filteredTasks.length === 0 ? (
-                <EmptyState onCreate={openCreateDialog} />
-              ) : (
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
-                  <SortableContext
-                    items={filteredTasks.map((task) => task.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <Stack spacing={1.2}>
-                      {filteredTasks.map((task, index) => (
-                        <SortableTaskCard
-                          key={task.id}
-                          task={task}
-                          delay={index * 45}
-                          onOpen={() => openTaskDetail(task)}
-                          onEdit={() => openEditDialog(task)}
-                          onDelete={() => openDeleteDialog(task)}
-                          onToggleDone={() => toggleDone(task)}
-                        />
-                      ))}
-                    </Stack>
-                  </SortableContext>
-                </DndContext>
-              )}
-            </Box>
-          </>
-        )}
-      </Stack>
+  const handleDragOver = ({ active, over }) => {
+    if (!over || !drag) return;
+    const overStatus = over.data.current?.status;
+    const current = drag.tasks.find((task) => task.id === active.id);
+    if (!overStatus || !current || current.status === overStatus) return;
 
-      <TaskFormDialog
-        open={taskDialogOpen}
-        editingTask={editingTask}
-        title={title}
-        setTitle={setTitle}
-        description={description}
-        setDescription={setDescription}
-        status={status}
-        setStatus={setStatus}
-        projectId={projectId}
-        setProjectId={setProjectId}
-        selectedProject={selectedProject}
-        projects={projects}
-        saving={saving}
-        pageError={pageError}
-        onClose={closeTaskDialog}
-        onSave={handleSaveTask}
-      />
+    const overTask =
+      over.data.current?.type === "task" ? drag.tasks.find((t) => t.id === over.id) : null;
+    const columnOrders = drag.tasks.filter((t) => t.status === overStatus).map((t) => t.order ?? 0);
+    const order = overTask
+      ? (overTask.order ?? 0) - 0.5
+      : (columnOrders.length ? Math.max(...columnOrders) : 0) + 1;
 
-      <TaskDetailDialog
-        open={taskDetailOpen}
-        task={selectedTask}
-        onClose={closeTaskDetail}
-        onEdit={() => {
-          if (!selectedTask) return;
-          const task = selectedTask;
-          closeTaskDetail();
-          openEditDialog(task);
-        }}
-        onToggleDone={() => {
-          if (!selectedTask) return;
-          toggleDone(selectedTask);
-          closeTaskDetail();
-        }}
-      />
+    setDrag({
+      ...drag,
+      tasks: drag.tasks.map((task) =>
+        task.id === active.id ? { ...task, status: overStatus, order } : task,
+      ),
+    });
+  };
 
-      <DeleteDialog
-        open={deleteDialogOpen}
-        taskToDelete={taskToDelete}
-        onClose={closeDeleteDialog}
-        onConfirm={confirmDeleteTask}
-      />
-    </Box>
-  );
-};
+  const handleDragEnd = ({ active, over }) => {
+    const local = drag?.tasks;
+    setDrag(null);
+    if (!over || !local) return;
 
-const PageHeader = ({ stats, projectsCount, onCreate }) => {
-  const theme = useTheme();
+    const moving = local.find((task) => task.id === active.id);
+    let column = local.filter((task) => task.status === moving.status).sort(sortTasks);
+    if (over.data.current?.type === "task" && over.id !== active.id) {
+      const from = column.findIndex((task) => task.id === active.id);
+      const to = column.findIndex((task) => task.id === over.id);
+      if (from >= 0 && to >= 0) column = arrayMove(column, from, to);
+    }
+
+    const original = new Map(tasks.map((task) => [task.id, task]));
+    const pool = uniqueOrders(column.map((task) => original.get(task.id)?.order ?? 0));
+
+    const changed = column
+      .map((task, index) => {
+        const before = original.get(task.id);
+        const next = { id: task.id, order: pool[index] };
+        if (before.status !== task.status) next.status = task.status;
+        return next;
+      })
+      .filter((item) => item.status || item.order !== (original.get(item.id)?.order ?? 0));
+
+    persist(changed);
+    if (moving.status === "completada" && original.get(moving.id)?.status !== "completada")
+      showToast(`"${moving.title}" se completó.`);
+  };
+
+  const cardHandlers = (task) => ({
+    onOpen: () => setSelectedTaskId(task.id),
+    onEdit: () => openForm(task),
+    onDelete: () => setTaskToDelete(task),
+    onToggleDone: () => toggleDone(task),
+    onToggleChecklistItem: (itemId) => toggleChecklistItem(task, itemId),
+    onAddChecklist: (text) => addChecklistItems(task, text),
+    onSetPriority: (priority) => updateTask(task, { priority }),
+    onSetStatus: (status) => setStatus(task, status),
+    onMoveTop: () => updateTask(task, { order: getEdgeOrder("first") }),
+  });
+
+  const activeTask = drag ? drag.tasks.find((task) => task.id === drag.activeId) : null;
+  const noResults = hasFilters && visibleTasks.length === 0;
 
   return (
-    <Card
-      elevation={0}
-      sx={{
-        ...getCardStyles(theme),
-        p: { xs: 2, sm: 2.4, md: 2.8 },
-        overflow: "hidden",
-      }}
-    >
-      <Stack
-        direction={{ xs: "column", lg: "row" }}
-        alignItems={{ xs: "stretch", lg: "center" }}
-        justifyContent="space-between"
-        spacing={{ xs: 2.4, lg: 3 }}
-        sx={{
-          width: "100%",
-        }}
-      >
-        <Stack
-          direction="row"
-          alignItems="flex-start"
-          spacing={1.35}
-          sx={{
-            flex: 1,
-            minWidth: 0,
-          }}
-        >
-          <Avatar
-            variant="rounded"
-            sx={{
-              width: { xs: 44, md: 48 },
-              height: { xs: 44, md: 48 },
-              mt: { xs: 0.15, md: 0.25 },
-              borderRadius: "16px",
-              color: theme.palette.primary.main,
-              backgroundColor: theme.palette.app.primarySoft,
-              border: `1px solid ${theme.palette.app.borderSoft}`,
+    <PageShell
+      loading={loading}
+      after={
+        <>
+          <TaskFormDialog
+            open={formOpen}
+            editingTask={editingTask}
+            form={form}
+            setField={setField}
+            projects={projects}
+            saving={saving}
+            error={formError}
+            onClose={closeForm}
+            onSave={handleSaveTask}
+          />
+
+          <TaskDetailDialog
+            open={Boolean(selectedTask)}
+            task={selectedTask}
+            onClose={() => setSelectedTaskId(null)}
+            onEdit={() => {
+              const task = selectedTask;
+              setSelectedTaskId(null);
+              openForm(task);
             }}
-          >
-            <AssignmentRoundedIcon sx={{ fontSize: { xs: 23, md: 25 } }} />
-          </Avatar>
+            onDelete={() => setTaskToDelete(selectedTask)}
+            onToggleDone={() => toggleDone(selectedTask)}
+            onToggleChecklistItem={(itemId) => toggleChecklistItem(selectedTask, itemId)}
+            onAddChecklist={(text) => addChecklistItems(selectedTask, text)}
+          />
 
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
-              sx={{
-                color: theme.palette.app.text,
-                fontWeight: 950,
-                letterSpacing: "-0.6px",
-                fontSize: {
-                  xs: "1.55rem",
-                  sm: "1.85rem",
-                  md: "2.15rem",
-                },
-                lineHeight: 1.05,
-              }}
-            >
-              Tareas
-            </Typography>
+          <DeleteDialog
+            open={Boolean(taskToDelete)}
+            title="Eliminar tarea"
+            previewTitle={taskToDelete?.title}
+            previewSubtitle={taskToDelete?.projectName || "Tarea personal"}
+            deleting={deleting}
+            onClose={() => setTaskToDelete(null)}
+            onConfirm={confirmDeleteTask}
+          />
 
-            <Typography
-              sx={{
-                mt: 0.8,
-                color: theme.palette.app.secondary,
-                fontSize: { xs: "0.9rem", md: "0.98rem" },
-                lineHeight: 1.65,
-                fontWeight: 600,
-                maxWidth: 680,
-              }}
-            >
-              Organizá tus pendientes, tareas en progreso y proyectos con una
-              vista simple, rápida y cómoda para trabajar desde notebook.
-            </Typography>
-
+          <Toast toast={toast} onClose={closeToast} />
+        </>
+      }
+    >
+      <Section>
+        <PageHeader
+          icon={<AssignmentRoundedIcon />}
+          title="Tareas"
+          description="Arrastrá para priorizar o cambiar de estado y tildá los pasos desde la tarjeta."
+          actions={
             <Stack
               direction="row"
+              alignItems="center"
               spacing={1}
-              sx={{ mt: 1.6, flexWrap: "wrap", rowGap: 1 }}
+              sx={{ alignSelf: { xs: "stretch", sm: "center" } }}
             >
-              <HeaderMiniChip label={`${stats.total} tareas`} />
-              <HeaderMiniChip label={`${stats.active} activas`} />
-              <HeaderMiniChip label={`${projectsCount} proyectos`} />
+              <ViewToggle value={view} onChange={changeView} />
+              <PrimaryButton onClick={() => openForm()} sx={{ flex: { xs: 1, sm: "none" } }}>
+                Nueva tarea
+              </PrimaryButton>
             </Stack>
-          </Box>
-        </Stack>
+          }
+        />
+      </Section>
 
-        <Stack
-          direction={{ xs: "column", sm: "row" }}
-          spacing={1.4}
-          alignItems={{ xs: "stretch", sm: "center" }}
-          justifyContent="flex-end"
-          sx={{
-            flexShrink: 0,
-            ml: { xs: 0, lg: "auto" },
-          }}
-        >
-          <Button
-            variant="contained"
-            startIcon={<AddRoundedIcon />}
-            onClick={onCreate}
-            sx={{
-              height: 42,
-              minHeight: 42,
-              px: 1.7,
-              py: 0,
-              borderRadius: "13px",
-              fontWeight: 900,
-              textTransform: "none",
-              boxShadow: "none",
-              whiteSpace: "nowrap",
-              fontSize: "0.84rem",
-              alignSelf: "center",
-              "& .MuiButton-startIcon": {
-                mr: 0.55,
-              },
-            }}
-          >
-            Nueva tarea
-          </Button>
-        </Stack>
-      </Stack>
-    </Card>
+      <PageAlert message={pageError || loadError} onClose={() => setPageError("")} />
+
+      {tasks.length === 0 ? (
+        <Section delay={70}>
+          <EmptyState
+            icon={<TaskAltRoundedIcon />}
+            title="Todavía no tenés tareas"
+            text="Creá tu primera tarea. Podés sumarle un checklist con los pasos y tildarlos a medida que avanzás."
+            actionLabel="Nueva tarea"
+            onAction={() => openForm()}
+          />
+        </Section>
+      ) : (
+        <>
+          <Section delay={70}>
+            <FilterBar
+              title={view === "board" ? "Tablero" : "Lista"}
+              subtitle={`${visibleTasks.length} de ${tasks.length} tareas${overdueCount ? ` · ${overdueCount} vencida${overdueCount === 1 ? "" : "s"}` : ""}`}
+              onReset={hasFilters ? resetFilters : undefined}
+            >
+              {view === "list" && (
+                <Stack direction="row" sx={{ gap: 0.75, flexWrap: { xs: "wrap", md: "nowrap" } }}>
+                  {LIST_FILTERS.map((item) => (
+                    <ToggleChip
+                      key={item.value}
+                      label={item.label}
+                      selected={listFilter === item.value}
+                      onClick={() => setListFilter(item.value)}
+                    />
+                  ))}
+                </Stack>
+              )}
+              {overdueCount > 0 && (
+                <ToggleChip
+                  label={`Vencidas · ${overdueCount}`}
+                  icon={<EventBusyRoundedIcon />}
+                  color={theme.palette.error.main}
+                  selected={onlyOverdue}
+                  onClick={() => setOnlyOverdue(!onlyOverdue)}
+                />
+              )}
+              <SearchField
+                value={search}
+                onChange={setSearch}
+                placeholder="Buscar tareas..."
+                width={190}
+              />
+              <FilterSelect
+                label="Proyecto"
+                value={filterProject}
+                onChange={setFilterProject}
+                minWidth={200}
+              >
+                {projectFilterOptions(projects)}
+              </FilterSelect>
+            </FilterBar>
+          </Section>
+
+          <Section delay={130}>
+            {noResults ? (
+              <EmptyState
+                icon={<SearchOffRoundedIcon />}
+                title="Sin resultados"
+                text="Ninguna tarea coincide con la búsqueda o los filtros elegidos."
+                actionLabel="Limpiar filtros"
+                actionIcon={<FilterAltOffRoundedIcon />}
+                onAction={resetFilters}
+              />
+            ) : view === "board" ? (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCorners}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
+                onDragCancel={() => setDrag(null)}
+              >
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: {
+                      xs: `repeat(${BOARD_COLUMNS.length}, 84%)`,
+                      sm: `repeat(${BOARD_COLUMNS.length}, 270px)`,
+                      lg: `repeat(${BOARD_COLUMNS.length}, minmax(232px, 1fr))`,
+                    },
+                    gap: 1.5,
+                    alignItems: "start",
+                    overflowX: "auto",
+                    scrollSnapType: { xs: "x mandatory", lg: "none" },
+                    pb: 1,
+                    mx: { xs: -2, sm: 0 },
+                    px: { xs: 2, sm: 0 },
+                  }}
+                >
+                  {BOARD_COLUMNS.map((status) => {
+                    const list = columnTasks(status);
+                    const limited =
+                      status === "completada" && !showAllDone && !drag
+                        ? list.slice(0, DONE_PREVIEW)
+                        : list;
+                    return (
+                      <BoardColumn
+                        key={status}
+                        status={status}
+                        count={list.length}
+                        onQuickAdd={status === DEFAULT_STATUS ? quickAdd : undefined}
+                        footer={
+                          status === "completada" && !drag && list.length > DONE_PREVIEW ? (
+                            <ShowMore
+                              label={
+                                showAllDone
+                                  ? "Mostrar menos"
+                                  : `Ver ${list.length - limited.length} más`
+                              }
+                              onClick={() => setShowAllDone(!showAllDone)}
+                            />
+                          ) : null
+                        }
+                      >
+                        <SortableContext
+                          items={limited.map((task) => task.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          {limited.map((task) => (
+                            <TaskCard key={task.id} task={task} {...cardHandlers(task)} />
+                          ))}
+                        </SortableContext>
+                      </BoardColumn>
+                    );
+                  })}
+                </Box>
+
+                {createPortal(
+                  <DragOverlay dropAnimation={{ duration: 180 }}>
+                    {activeTask ? <TaskCardView task={activeTask} overlay /> : null}
+                  </DragOverlay>,
+                  document.body,
+                )}
+              </DndContext>
+            ) : (
+              <Stack spacing={1.25}>
+                <QuickAdd onAdd={quickAdd} />
+                {listTasks.length === 0 ? (
+                  <EmptyState
+                    icon={<TaskAltRoundedIcon />}
+                    title={listFilter === "completada" ? "Sin tareas completadas" : "Todo al día"}
+                    text={
+                      listFilter === "completada"
+                        ? "Cuando completes tareas van a aparecer acá."
+                        : "No tenés tareas activas con estos filtros."
+                    }
+                  />
+                ) : (
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleListDragEnd}
+                  >
+                    {BOARD_COLUMNS.map((status) => {
+                      const group = listTasks.filter((task) => task.status === status);
+                      if (!group.length) return null;
+                      return (
+                        <Box key={status} sx={{ pt: 0.75 }}>
+                          <ListGroupHeader status={status} count={group.length} />
+                          <SortableContext
+                            items={group.map((task) => task.id)}
+                            strategy={rectSortingStrategy}
+                          >
+                            <Box
+                              sx={{
+                                display: "grid",
+                                gridTemplateColumns: {
+                                  xs: "minmax(0, 1fr)",
+                                  lg: "repeat(2, minmax(0, 1fr))",
+                                },
+                                alignItems: "start",
+                                gap: 1,
+                              }}
+                            >
+                              {group.map((task) => (
+                                <TaskCard key={task.id} task={task} {...cardHandlers(task)} />
+                              ))}
+                            </Box>
+                          </SortableContext>
+                        </Box>
+                      );
+                    })}
+                  </DndContext>
+                )}
+              </Stack>
+            )}
+          </Section>
+        </>
+      )}
+    </PageShell>
   );
 };
 
-const HeaderMiniChip = ({ label }) => {
+/* ---------- Piezas de la vista ---------- */
+
+function ListGroupHeader({ status, count }) {
   const theme = useTheme();
+  const color = getStatusColor(theme, status);
 
   return (
-    <Chip
-      size="small"
-      label={label}
-      sx={{
-        height: 28,
-        borderRadius: "999px",
-        backgroundColor: getSoftBackground(theme),
-        border: `1px solid ${theme.palette.app.borderSoft}`,
-        color: theme.palette.app.secondary,
-        fontWeight: 800,
-      }}
-    />
+    <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1, px: 0.5 }}>
+      <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: color }} />
+      <Typography sx={{ fontSize: "0.82rem", fontWeight: 850, color: theme.palette.app.text }}>
+        {getStatusLabel(status)}
+      </Typography>
+      <Box
+        sx={{
+          px: 0.8,
+          borderRadius: "7px",
+          fontSize: "0.72rem",
+          fontWeight: 850,
+          color,
+          bgcolor: softTint(theme, color, 0.12, 0.18),
+        }}
+      >
+        {count}
+      </Box>
+    </Stack>
   );
-};
+}
 
-const StatsGrid = ({ stats }) => {
+function ViewToggle({ value, onChange }) {
   const theme = useTheme();
-
-  const items = [
-    {
-      label: "Pendientes",
-      value: stats.pending,
-      icon: <PendingActionsRoundedIcon />,
-      color: theme.palette.warning.main,
-    },
-    {
-      label: "En progreso",
-      value: stats.inProgress,
-      icon: <AccessTimeRoundedIcon />,
-      color: theme.palette.info.main,
-    },
-    {
-      label: "Completadas",
-      value: stats.completed,
-      icon: <CheckCircleRoundedIcon />,
-      color: theme.palette.success.main,
-    },
-    {
-      label: "Pausadas",
-      value: stats.paused,
-      icon: <PauseCircleRoundedIcon />,
-      color: theme.palette.app.secondary,
-    },
+  const options = [
+    { value: "board", label: "Tablero", icon: <ViewKanbanRoundedIcon /> },
+    { value: "list", label: "Lista", icon: <ViewListRoundedIcon /> },
   ];
 
   return (
-    <Box
+    <Stack
+      direction="row"
       sx={{
-        display: "grid",
-        gridTemplateColumns: {
-          xs: "1fr 1fr",
-          md: "repeat(4, 1fr)",
-        },
-        gap: { xs: 1.2, md: 1.6 },
+        p: 0.4,
+        gap: 0.4,
+        height: 40,
+        borderRadius: "12px",
+        bgcolor: getSoftBackground(theme),
+        border: `1px solid ${theme.palette.app.borderSoft}`,
       }}
     >
-      {items.map((item, index) => (
-        <Card
-          key={item.label}
-          elevation={0}
-          sx={{
-            ...getCardStyles(theme),
-            ...getSoftFadeSx(index * 45),
-            p: { xs: 1.6, md: 1.9 },
-            borderRadius: "20px",
-            transition: "all 0.18s ease",
-            "&:hover": {
-              transform: "translateY(-2px)",
-              borderColor: alpha(item.color, 0.28),
-            },
-          }}
-        >
-          <Stack direction="row" alignItems="center" spacing={1.25}>
-            <Avatar
-              variant="rounded"
-              sx={{
-                width: { xs: 40, md: 44 },
-                height: { xs: 40, md: 44 },
-                borderRadius: "15px",
-                color: item.color,
-                backgroundColor: alpha(
-                  item.color,
-                  theme.palette.mode === "dark" ? 0.16 : 0.1
-                ),
-              }}
-            >
-              {item.icon}
-            </Avatar>
-
-            <Box sx={{ minWidth: 0 }}>
-              <Typography
-                sx={{
-                  color: theme.palette.app.text,
-                  fontWeight: 950,
-                  fontSize: { xs: "1.45rem", md: "1.75rem" },
-                  lineHeight: 1,
-                  letterSpacing: "-0.6px",
-                }}
-              >
-                {item.value}
-              </Typography>
-
-              <Typography
-                noWrap
-                sx={{
-                  mt: 0.55,
-                  color: theme.palette.app.secondary,
-                  fontSize: "0.78rem",
-                  fontWeight: 800,
-                }}
-              >
-                {item.label}
-              </Typography>
-            </Box>
-          </Stack>
-        </Card>
-      ))}
-    </Box>
-  );
-};
-
-const FiltersPanel = ({
-  filterStatus,
-  setFilterStatus,
-  filterProject,
-  setFilterProject,
-  projects,
-  visibleCount,
-  totalCount,
-}) => {
-  const theme = useTheme();
-
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        ...getCardStyles(theme),
-        p: { xs: 1.6, md: 2 },
-      }}
-    >
-      <Stack
-        direction={{ xs: "column", lg: "row" }}
-        spacing={1.5}
-        alignItems={{ xs: "stretch", lg: "center" }}
-        justifyContent="space-between"
-      >
-        <Stack direction="row" alignItems="center" spacing={1.2}>
-          <Avatar
-            variant="rounded"
+      {options.map((option) => {
+        const selected = value === option.value;
+        return (
+          <Box
+            key={option.value}
+            component="button"
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(option.value)}
             sx={{
-              width: 42,
-              height: 42,
-              borderRadius: "15px",
-              color: theme.palette.primary.main,
-              backgroundColor: theme.palette.app.primarySoft,
+              all: "unset",
+              display: "flex",
+              alignItems: "center",
+              gap: 0.6,
+              px: 1.2,
+              borderRadius: "9px",
+              cursor: "pointer",
+              fontSize: "0.8rem",
+              fontWeight: selected ? 800 : 650,
+              color: selected ? theme.palette.primary.main : theme.palette.app.secondary,
+              bgcolor: selected ? theme.palette.app.surface : "transparent",
+              boxShadow: selected ? "0 2px 8px rgba(15,23,42,0.08)" : "none",
+              transition: "all 0.16s ease",
+              "& svg": { fontSize: 18 },
             }}
           >
-            <FilterListRoundedIcon />
-          </Avatar>
-
-          <Box>
-            <Typography
-              sx={{
-                color: theme.palette.app.text,
-                fontWeight: 900,
-                fontSize: "0.98rem",
-              }}
-            >
-              Filtros
-            </Typography>
-
-            <Typography
-              sx={{
-                mt: 0.2,
-                color: theme.palette.app.secondary,
-                fontSize: "0.82rem",
-                fontWeight: 650,
-              }}
-            >
-              {visibleCount} visibles de {totalCount} tareas.
-            </Typography>
+            {option.icon}
+            <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+              {option.label}
+            </Box>
           </Box>
-        </Stack>
-
-        <Stack
-          direction={{ xs: "column", sm: "row" }}
-          spacing={1.2}
-          sx={{ width: { xs: "100%", lg: "auto" } }}
-        >
-          <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 180 } }}>
-            <InputLabel>Estado</InputLabel>
-            <Select
-              label="Estado"
-              value={filterStatus}
-              onChange={(event) => setFilterStatus(event.target.value)}
-              sx={{
-                borderRadius: "14px",
-                backgroundColor: getSoftBackground(theme),
-              }}
-            >
-              <MenuItem value="noCompletadas">No completadas</MenuItem>
-              <MenuItem value="todas">Todas</MenuItem>
-
-              {STATUSES.map((item) => (
-                <MenuItem key={item} value={item}>
-                  {getStatusLabel(item)}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 220 } }}>
-            <InputLabel>Proyecto</InputLabel>
-            <Select
-              label="Proyecto"
-              value={filterProject}
-              onChange={(event) => setFilterProject(event.target.value)}
-              sx={{
-                borderRadius: "14px",
-                backgroundColor: getSoftBackground(theme),
-              }}
-            >
-              <MenuItem value="todos">Todos los proyectos</MenuItem>
-              <MenuItem value="sinProyecto">Sin proyecto</MenuItem>
-
-              {projects.map((project) => (
-                <MenuItem key={project.id} value={project.id}>
-                  {project.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Stack>
-      </Stack>
-    </Card>
+        );
+      })}
+    </Stack>
   );
-};
+}
 
-const SortableTaskCard = ({ task, delay = 0, onOpen, onEdit, onDelete, onToggleDone }) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: task.id,
-  });
+function ToggleChip({ label, icon, selected, color, onClick }) {
+  const theme = useTheme();
+  const c = color || theme.palette.primary.main;
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 10 : "auto",
-    opacity: isDragging ? 0.92 : 1,
+  return (
+    <Box
+      component="button"
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      sx={{
+        all: "unset",
+        boxSizing: "border-box",
+        height: 34,
+        px: 1.3,
+        display: "flex",
+        alignItems: "center",
+        gap: 0.6,
+        borderRadius: "10px",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        fontSize: "0.8rem",
+        fontWeight: selected ? 800 : 650,
+        color: selected ? c : theme.palette.app.secondary,
+        bgcolor: selected ? softTint(theme, c, 0.1, 0.18) : getSoftBackground(theme),
+        border: `1px solid ${selected ? alpha(c, 0.35) : theme.palette.app.borderSoft}`,
+        transition: "all 0.16s ease",
+        "& svg": { fontSize: 16 },
+        "&:hover": { bgcolor: softTint(theme, c, 0.1, 0.18) },
+      }}
+    >
+      {icon}
+      {label}
+    </Box>
+  );
+}
+
+function QuickAdd({ onAdd, dense = false }) {
+  const theme = useTheme();
+  const [text, setText] = useState("");
+
+  const submit = () => {
+    if (!text.trim()) return;
+    onAdd(text);
+    setText("");
   };
 
   return (
-    <Box ref={setNodeRef} style={style}>
-      <TaskCard
-        task={task}
-        delay={delay}
-        isDragging={isDragging}
-        dragAttributes={attributes}
-        dragListeners={listeners}
-        onOpen={onOpen}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        onToggleDone={onToggleDone}
+    <Stack
+      direction="row"
+      alignItems="center"
+      spacing={0.75}
+      sx={{
+        px: 1,
+        height: dense ? 40 : 46,
+        borderRadius: "12px",
+        border: `1.5px dashed ${alpha(theme.palette.primary.main, 0.35)}`,
+        bgcolor: theme.palette.app.surface,
+        transition: "all 0.16s ease",
+        "&:focus-within": {
+          borderStyle: "solid",
+          borderColor: alpha(theme.palette.primary.main, 0.6),
+          boxShadow: `0 0 0 3px ${alpha(theme.palette.primary.main, 0.1)}`,
+        },
+      }}
+    >
+      <AddRoundedIcon sx={{ fontSize: 19, color: theme.palette.primary.main }} />
+      <InputBase
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            submit();
+          }
+          if (event.key === "Escape") setText("");
+        }}
+        placeholder="Agregar tarea rápida y Enter..."
+        slotProps={{ input: { "aria-label": "Agregar tarea rápida" } }}
+        sx={{ flex: 1, fontSize: dense ? "0.84rem" : "0.9rem", fontWeight: 600 }}
       />
+      {text.trim() && (
+        <Typography
+          sx={{ fontSize: "0.7rem", fontWeight: 700, color: theme.palette.app.secondary }}
+        >
+          Enter ↵
+        </Typography>
+      )}
+    </Stack>
+  );
+}
+
+function ShowMore({ label, onClick }) {
+  const theme = useTheme();
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={onClick}
+      sx={{
+        all: "unset",
+        display: "block",
+        textAlign: "center",
+        py: 0.75,
+        borderRadius: "10px",
+        cursor: "pointer",
+        fontSize: "0.78rem",
+        fontWeight: 750,
+        color: theme.palette.app.secondary,
+        "&:hover": { color: theme.palette.primary.main, bgcolor: theme.palette.app.primarySoft },
+      }}
+    >
+      {label}
     </Box>
   );
-};
+}
 
-const TaskCard = ({
-  task,
-  delay = 0,
-  isDragging,
-  dragAttributes,
-  dragListeners,
-  onOpen,
-  onEdit,
-  onDelete,
-  onToggleDone,
-}) => {
+function BoardColumn({ status, count, onQuickAdd, footer, children }) {
   const theme = useTheme();
-
-  const isDone = task.status === "completada";
-  const statusColor = getStatusColor(theme, task.status);
-  const projectColor = getProjectColor(theme, task);
-
-  return (
-    <Card
-      elevation={0}
-      onClick={onOpen}
-      sx={{
-        ...getCardStyles(theme),
-        ...(!isDragging ? getSoftFadeSx(delay) : {}),
-        borderRadius: "22px",
-        opacity: isDone ? 0.72 : 1,
-        transition: "all 0.18s ease",
-        cursor: isDragging ? "grabbing" : "pointer",
-        boxShadow: isDragging
-          ? theme.palette.mode === "dark"
-            ? "0 26px 70px rgba(0, 0, 0, 0.48)"
-            : "0 26px 60px rgba(15, 23, 42, 0.18)"
-          : getCardStyles(theme).boxShadow,
-        "&:hover": {
-          transform: isDragging ? "none" : "translateY(-2px)",
-          borderColor: alpha(statusColor, 0.32),
-        },
-      }}
-    >
-      <Stack
-        direction={{ xs: "column", md: "row" }}
-        alignItems={{ xs: "stretch", md: "center" }}
-        spacing={{ xs: 1.4, md: 2 }}
-        sx={{ p: { xs: 1.6, md: 1.9 } }}
-      >
-        <Stack
-          direction="row"
-          alignItems="center"
-          spacing={1.45}
-          sx={{ flex: 1, minWidth: 0 }}
-        >
-          <ProjectLogo
-            color={projectColor}
-            logoUrl={task.projectLogoUrl}
-            letter={task.projectName?.charAt(0)?.toUpperCase()}
-            size={54}
-          />
-
-          <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Stack direction="row" spacing={0.8} alignItems="center" sx={{ mb: 0.55 }}>
-              <Chip
-                size="small"
-                icon={getStatusIcon(task.status)}
-                label={getStatusLabel(task.status)}
-                sx={{
-                  height: 27,
-                  borderRadius: "999px",
-                  color: statusColor,
-                  backgroundColor: alpha(
-                    statusColor,
-                    theme.palette.mode === "dark" ? 0.15 : 0.09
-                  ),
-                  border: `1px solid ${alpha(statusColor, 0.18)}`,
-                  fontWeight: 850,
-                  "& .MuiChip-icon": {
-                    color: statusColor,
-                  },
-                }}
-              />
-            </Stack>
-
-            <Typography
-              sx={{
-                color: theme.palette.app.text,
-                fontSize: { xs: "1rem", md: "1.1rem" },
-                fontWeight: 950,
-                letterSpacing: "-0.25px",
-                textDecoration: isDone ? "line-through" : "none",
-              }}
-            >
-              {task.title || "Tarea sin título"}
-            </Typography>
-
-            <Stack direction="row" alignItems="center" spacing={0.65} sx={{ mt: 0.45 }}>
-              <FolderRoundedIcon
-                sx={{
-                  color: theme.palette.app.secondary,
-                  fontSize: 16,
-                  flexShrink: 0,
-                }}
-              />
-
-              <Typography
-                noWrap
-                sx={{
-                  color: theme.palette.app.secondary,
-                  fontSize: "0.84rem",
-                  fontWeight: 650,
-                }}
-              >
-                {task.projectName || "Tarea personal"}
-              </Typography>
-            </Stack>
-
-            {task.description && (
-              <Typography
-                sx={{
-                  mt: 1,
-                  color: theme.palette.app.secondary,
-                  fontSize: "0.86rem",
-                  lineHeight: 1.6,
-                  fontWeight: 550,
-                  display: "-webkit-box",
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
-                }}
-              >
-                {task.description}
-              </Typography>
-            )}
-          </Box>
-        </Stack>
-
-        <Stack
-          direction="row"
-          alignItems="center"
-          justifyContent={{ xs: "space-between", md: "flex-end" }}
-          spacing={0.75}
-          sx={{ flexShrink: 0 }}
-        >
-          <Stack direction="row" spacing={0.6}>
-            <Tooltip title={isDone ? "Restaurar tarea" : "Marcar completada"}>
-              <IconButton
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleDone();
-                }}
-                sx={{
-                  width: 40,
-                  height: 40,
-                  color: isDone
-                    ? theme.palette.warning.main
-                    : theme.palette.success.main,
-                  backgroundColor: alpha(
-                    isDone
-                      ? theme.palette.warning.main
-                      : theme.palette.success.main,
-                    0.11
-                  ),
-                  "&:hover": {
-                    backgroundColor: alpha(
-                      isDone
-                        ? theme.palette.warning.main
-                        : theme.palette.success.main,
-                      0.17
-                    ),
-                  },
-                }}
-              >
-                {isDone ? <RestoreRoundedIcon /> : <CheckCircleRoundedIcon />}
-              </IconButton>
-            </Tooltip>
-
-            <Tooltip title="Editar">
-              <IconButton
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onEdit();
-                }}
-                sx={{
-                  width: 40,
-                  height: 40,
-                  color: theme.palette.primary.main,
-                  backgroundColor: theme.palette.app.primarySoft,
-                  "&:hover": {
-                    backgroundColor: alpha(theme.palette.primary.main, 0.16),
-                  },
-                }}
-              >
-                <EditRoundedIcon />
-              </IconButton>
-            </Tooltip>
-
-            <Tooltip title="Eliminar">
-              <IconButton
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onDelete();
-                }}
-                sx={{
-                  width: 40,
-                  height: 40,
-                  color: theme.palette.error.main,
-                  backgroundColor: alpha(theme.palette.error.main, 0.1),
-                  "&:hover": {
-                    backgroundColor: alpha(theme.palette.error.main, 0.17),
-                  },
-                }}
-              >
-                <DeleteRoundedIcon />
-              </IconButton>
-            </Tooltip>
-          </Stack>
-
-          <Tooltip title="Mantener apretado y arrastrar">
-            <IconButton
-              {...dragAttributes}
-              {...dragListeners}
-              onClick={(event) => event.stopPropagation()}
-              sx={{
-                width: 42,
-                height: 42,
-                borderRadius: "15px",
-                cursor: isDragging ? "grabbing" : "grab",
-                color: theme.palette.app.secondary,
-                backgroundColor: getSoftBackground(theme),
-                border: `1px solid ${theme.palette.app.borderSoft}`,
-                touchAction: "none",
-                "&:hover": {
-                  color: theme.palette.primary.main,
-                  backgroundColor: theme.palette.app.primarySoft,
-                },
-              }}
-            >
-              <DragIndicatorRoundedIcon />
-            </IconButton>
-          </Tooltip>
-        </Stack>
-      </Stack>
-    </Card>
-  );
-};
-
-const TaskDetailDialog = ({ open, task, onClose, onEdit, onToggleDone }) => {
-  const theme = useTheme();
-
-  if (!task) return null;
-
-  const isDone = task.status === "completada";
-  const statusColor = getStatusColor(theme, task.status);
-  const projectColor = getProjectColor(theme, task);
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      fullWidth
-      maxWidth="sm"
-      PaperProps={{
-        sx: {
-          borderRadius: "24px",
-          backgroundColor: theme.palette.app.surface,
-          backgroundImage: "none",
-          border: `1px solid ${theme.palette.app.borderSoft}`,
-          boxShadow:
-            theme.palette.mode === "dark"
-              ? "0 28px 90px rgba(0,0,0,0.55)"
-              : "0 28px 80px rgba(15,23,42,0.18)",
-          overflow: "hidden",
-        },
-      }}
-    >
-      <DialogTitle
-        sx={{
-          position: "relative",
-          px: { xs: 2.2, md: 3 },
-          pt: 2.4,
-          pb: 2,
-          pr: 7,
-        }}
-      >
-        <Stack direction="row" alignItems="center" spacing={1.4}>
-          <ProjectLogo
-            color={projectColor}
-            logoUrl={task.projectLogoUrl}
-            letter={task.projectName?.charAt(0)?.toUpperCase()}
-            size={58}
-          />
-
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Chip
-              size="small"
-              icon={getStatusIcon(task.status)}
-              label={getStatusLabel(task.status)}
-              sx={{
-                height: 28,
-                mb: 0.8,
-                borderRadius: "999px",
-                color: statusColor,
-                backgroundColor: alpha(
-                  statusColor,
-                  theme.palette.mode === "dark" ? 0.15 : 0.09
-                ),
-                border: `1px solid ${alpha(statusColor, 0.18)}`,
-                fontWeight: 900,
-                "& .MuiChip-icon": {
-                  color: statusColor,
-                },
-              }}
-            />
-
-            <Typography
-              sx={{
-                color: theme.palette.app.text,
-                fontSize: { xs: "1.2rem", md: "1.45rem" },
-                lineHeight: 1.25,
-                fontWeight: 950,
-                letterSpacing: "-0.3px",
-                textDecoration: isDone ? "line-through" : "none",
-                overflowWrap: "anywhere",
-              }}
-            >
-              {task.title || "Tarea sin título"}
-            </Typography>
-          </Box>
-        </Stack>
-
-        <IconButton
-          onClick={onClose}
-          sx={{
-            position: "absolute",
-            top: 16,
-            right: 16,
-            width: 38,
-            height: 38,
-            borderRadius: "14px",
-            color: theme.palette.app.secondary,
-            backgroundColor: getSoftBackground(theme),
-            border: `1px solid ${theme.palette.app.borderSoft}`,
-            "&:hover": {
-              color: theme.palette.primary.main,
-              backgroundColor: theme.palette.app.primarySoft,
-            },
-          }}
-        >
-          <CloseRoundedIcon />
-        </IconButton>
-      </DialogTitle>
-
-      <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
-
-      <DialogContent sx={{ px: { xs: 2.2, md: 3 }, py: 2.4 }}>
-        <Stack spacing={1.8}>
-          <Box
-            sx={{
-              borderRadius: "18px",
-              p: 1.6,
-              backgroundColor: getSoftBackground(theme),
-              border: `1px solid ${theme.palette.app.borderSoft}`,
-            }}
-          >
-            <Stack direction="row" alignItems="center" spacing={1.2}>
-              <Avatar
-                variant="rounded"
-                sx={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: "14px",
-                  color: projectColor,
-                  backgroundColor: alpha(
-                    projectColor,
-                    theme.palette.mode === "dark" ? 0.16 : 0.1
-                  ),
-                }}
-              >
-                <FolderRoundedIcon />
-              </Avatar>
-
-              <Box sx={{ minWidth: 0 }}>
-                <Typography
-                  sx={{
-                    color: theme.palette.app.secondary,
-                    fontSize: "0.76rem",
-                    fontWeight: 850,
-                  }}
-                >
-                  PROYECTO
-                </Typography>
-
-                <Typography
-                  sx={{
-                    mt: 0.2,
-                    color: theme.palette.app.text,
-                    fontWeight: 900,
-                    overflowWrap: "anywhere",
-                  }}
-                >
-                  {task.projectName || "Tarea personal"}
-                </Typography>
-              </Box>
-            </Stack>
-          </Box>
-
-          <Box
-            sx={{
-              borderRadius: "18px",
-              p: { xs: 1.6, md: 1.8 },
-              backgroundColor: theme.palette.app.surface,
-              border: `1px solid ${theme.palette.app.borderSoft}`,
-            }}
-          >
-            <Typography
-              sx={{
-                color: theme.palette.app.text,
-                fontSize: "0.82rem",
-                fontWeight: 950,
-                textTransform: "uppercase",
-                letterSpacing: 0.45,
-              }}
-            >
-              Descripción
-            </Typography>
-
-            <Typography
-              sx={{
-                mt: 1,
-                color: task.description
-                  ? theme.palette.app.secondary
-                  : alpha(theme.palette.app.secondary, 0.72),
-                fontSize: "0.95rem",
-                lineHeight: 1.75,
-                fontWeight: 600,
-                whiteSpace: "pre-wrap",
-                overflowWrap: "anywhere",
-              }}
-            >
-              {task.description || "Esta tarea no tiene descripción."}
-            </Typography>
-          </Box>
-        </Stack>
-      </DialogContent>
-
-      <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
-
-      <DialogActions
-        sx={{
-          px: { xs: 2.2, md: 3 },
-          py: 2,
-          justifyContent: "space-between",
-          gap: 1,
-        }}
-      >
-        <Button
-          onClick={onToggleDone}
-          startIcon={isDone ? <RestoreRoundedIcon /> : <CheckCircleRoundedIcon />}
-          sx={{
-            minHeight: 42,
-            px: 1.7,
-            borderRadius: "14px",
-            color: isDone
-              ? theme.palette.warning.main
-              : theme.palette.success.main,
-            backgroundColor: alpha(
-              isDone
-                ? theme.palette.warning.main
-                : theme.palette.success.main,
-              0.1
-            ),
-            fontWeight: 900,
-            textTransform: "none",
-            "&:hover": {
-              backgroundColor: alpha(
-                isDone
-                  ? theme.palette.warning.main
-                  : theme.palette.success.main,
-                0.16
-              ),
-            },
-          }}
-        >
-          {isDone ? "Restaurar" : "Completar"}
-        </Button>
-
-        <Stack direction="row" spacing={1}>
-          <Button
-            onClick={onClose}
-            sx={{
-              minHeight: 42,
-              borderRadius: "14px",
-              color: theme.palette.app.secondary,
-              fontWeight: 850,
-              textTransform: "none",
-            }}
-          >
-            Cerrar
-          </Button>
-
-          <Button
-            variant="contained"
-            startIcon={<EditRoundedIcon />}
-            onClick={onEdit}
-            sx={{
-              minHeight: 42,
-              px: 2,
-              borderRadius: "14px",
-              fontWeight: 900,
-              textTransform: "none",
-              boxShadow: "none",
-            }}
-          >
-            Editar
-          </Button>
-        </Stack>
-      </DialogActions>
-    </Dialog>
-  );
-};
-
-const ProjectLogo = ({ color, logoUrl, letter, size = 52 }) => {
-  const theme = useTheme();
+  const color = getStatusColor(theme, status);
+  const { setNodeRef, isOver } = useDroppable({
+    id: `col:${status}`,
+    data: { type: "column", status },
+  });
 
   return (
     <Box
+      ref={setNodeRef}
       sx={{
-        width: size,
-        height: size,
+        scrollSnapAlign: "start",
+        minWidth: 0,
+        p: 1,
         borderRadius: "16px",
-        border: `1px solid ${alpha(color || theme.palette.primary.main, 0.22)}`,
-        backgroundColor:
-          theme.palette.mode === "dark"
-            ? alpha("#FFFFFF", 0.92)
-            : alpha(color || theme.palette.primary.main, 0.08),
-        overflow: "hidden",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
+        bgcolor: isOver ? softTint(theme, color, 0.07, 0.1) : getSoftBackground(theme),
+        border: `1px solid ${isOver ? alpha(color, 0.4) : theme.palette.app.borderSoft}`,
+        transition: "background-color 0.16s ease, border-color 0.16s ease",
       }}
     >
-      {logoUrl ? (
-        <Box
-          component="img"
-          src={logoUrl}
-          alt="Proyecto"
-          sx={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-          }}
-        />
-      ) : letter ? (
+      <Stack direction="row" alignItems="center" spacing={0.9} sx={{ px: 0.75, pt: 0.25, pb: 1 }}>
+        <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: color }} />
         <Typography
+          sx={{ flex: 1, fontSize: "0.84rem", fontWeight: 800, color: theme.palette.app.text }}
+        >
+          {getStatusLabel(status)}
+        </Typography>
+        <Box
           sx={{
+            minWidth: 22,
+            height: 20,
+            px: 0.6,
+            borderRadius: "7px",
+            display: "grid",
+            placeItems: "center",
+            fontSize: "0.72rem",
+            fontWeight: 800,
             color,
-            fontSize: "1.25rem",
-            fontWeight: 950,
+            bgcolor: softTint(theme, color, 0.12, 0.18),
           }}
         >
-          {letter}
-        </Typography>
-      ) : (
-        <FolderRoundedIcon
-          sx={{
-            color,
-            fontSize: 27,
-          }}
-        />
+          {count}
+        </Box>
+      </Stack>
+
+      {onQuickAdd && (
+        <Box sx={{ mb: 1 }}>
+          <QuickAdd onAdd={onQuickAdd} dense />
+        </Box>
       )}
-    </Box>
-  );
-};
 
-const EmptyState = ({ onCreate }) => {
-  const theme = useTheme();
-
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        ...getCardStyles(theme),
-        ...getSoftFadeSx(40),
-        p: { xs: 3, md: 4 },
-        textAlign: "center",
-      }}
-    >
-      <Avatar
-        variant="rounded"
+      <Stack
+        spacing={1}
         sx={{
-          width: 70,
-          height: 70,
-          mx: "auto",
-          mb: 2,
-          borderRadius: "22px",
-          color: theme.palette.primary.main,
-          backgroundColor: theme.palette.app.primarySoft,
-        }}
-      >
-        <TaskAltRoundedIcon sx={{ fontSize: 36 }} />
-      </Avatar>
-
-      <Typography
-        sx={{
-          color: theme.palette.app.text,
-          fontSize: { xs: "1.25rem", md: "1.5rem" },
-          fontWeight: 950,
-        }}
-      >
-        No hay tareas para mostrar
-      </Typography>
-
-      <Typography
-        sx={{
-          mt: 0.8,
-          mb: 2.2,
-          color: theme.palette.app.secondary,
-          fontWeight: 600,
-        }}
-      >
-        Creá una nueva tarea o cambiá los filtros activos.
-      </Typography>
-
-      <Button
-        variant="contained"
-        startIcon={<AddRoundedIcon />}
-        onClick={onCreate}
-        sx={{
-          minHeight: 38,
-          px: 1.7,
-          borderRadius: "13px",
-          fontWeight: 900,
-          textTransform: "none",
-          boxShadow: "none",
-          whiteSpace: "nowrap",
-          fontSize: "0.84rem",
-          alignSelf: "center",
-          "& .MuiButton-startIcon": {
-            mr: 0.55,
+          maxHeight: { md: `calc(100vh - ${onQuickAdd ? 268 : 220}px)` },
+          minHeight: 60,
+          overflowY: { md: "auto" },
+          mx: -0.5,
+          px: 0.5,
+          pb: 0.25,
+          scrollbarWidth: "thin",
+          scrollbarColor: "transparent transparent",
+          "&:hover": {
+            scrollbarColor: `${alpha(theme.palette.app.secondary, 0.35)} transparent`,
+          },
+          "&::-webkit-scrollbar": { width: 6 },
+          "&::-webkit-scrollbar-track": { background: "transparent" },
+          "&::-webkit-scrollbar-thumb": {
+            borderRadius: 999,
+            background: "transparent",
+          },
+          "&:hover::-webkit-scrollbar-thumb": {
+            background: alpha(theme.palette.app.secondary, 0.35),
+          },
+          "&::-webkit-scrollbar-thumb:hover": {
+            background: alpha(theme.palette.app.secondary, 0.55),
           },
         }}
       >
-        Nueva tarea
-      </Button>
-    </Card>
-  );
-};
-
-const TaskFormDialog = ({
-  open,
-  editingTask,
-  title,
-  setTitle,
-  description,
-  setDescription,
-  status,
-  setStatus,
-  projectId,
-  setProjectId,
-  selectedProject,
-  projects,
-  saving,
-  pageError,
-  onClose,
-  onSave,
-}) => {
-  const theme = useTheme();
-  const statusColor = getStatusColor(theme, status);
-
-  return (
-    <Dialog
-      open={open}
-      onClose={saving ? undefined : onClose}
-      fullWidth
-      maxWidth="sm"
-      PaperProps={{
-        sx: {
-          borderRadius: "24px",
-          backgroundColor: theme.palette.app.surface,
-          backgroundImage: "none",
-          border: `1px solid ${theme.palette.app.borderSoft}`,
-        },
-      }}
-    >
-      <Box component="form" onSubmit={onSave}>
-        <DialogTitle
-          sx={{
-            position: "relative",
-            px: { xs: 2.2, md: 3 },
-            pt: 2.4,
-            pb: 2,
-            pr: 7,
-          }}
-        >
-          <Stack
-            direction="row"
-            alignItems="flex-start"
-            justifyContent="space-between"
-            spacing={2}
-          >
-            <Stack direction="row" alignItems="center" spacing={1.4}>
-              <Avatar
-                variant="rounded"
-                sx={{
-                  width: 50,
-                  height: 50,
-                  borderRadius: "16px",
-                  color: statusColor,
-                  backgroundColor: alpha(statusColor, 0.12),
-                }}
-              >
-                {editingTask ? <EditRoundedIcon /> : <AddRoundedIcon />}
-              </Avatar>
-
-              <Box>
-                <Typography
-                  sx={{
-                    color: theme.palette.app.text,
-                    fontSize: "1.25rem",
-                    fontWeight: 950,
-                  }}
-                >
-                  {editingTask ? "Editar tarea" : "Nueva tarea"}
-                </Typography>
-
-                <Typography
-                  sx={{
-                    mt: 0.3,
-                    color: theme.palette.app.secondary,
-                    fontSize: "0.86rem",
-                    fontWeight: 600,
-                  }}
-                >
-                  Completá los datos principales.
-                </Typography>
-              </Box>
-            </Stack>
-
-            <IconButton
-              onClick={onClose}
-              disabled={saving}
-              sx={{
-                position: "absolute",
-                top: 16,
-                right: 16,
-                width: 38,
-                height: 38,
-                borderRadius: "14px",
-                color: theme.palette.app.secondary,
-                backgroundColor: getSoftBackground(theme),
-                border: `1px solid ${theme.palette.app.borderSoft}`,
-                "&:hover": {
-                  color: theme.palette.primary.main,
-                  backgroundColor: theme.palette.app.primarySoft,
-                },
-              }}
-            >
-              <CloseRoundedIcon />
-            </IconButton>
-          </Stack>
-        </DialogTitle>
-
-        <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
-
-        <DialogContent sx={{ px: { xs: 2.2, md: 3 }, py: 2.4 }}>
-          <Stack spacing={2}>
-            {pageError && (
-              <Alert severity="error" sx={{ borderRadius: "14px", fontWeight: 700 }}>
-                {pageError}
-              </Alert>
-            )}
-
-            <TextField
-              label="Título"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              fullWidth
-              disabled={saving}
-              autoFocus
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: "14px",
-                },
-              }}
-            />
-
-            <TextField
-              label="Descripción"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              fullWidth
-              multiline
-              minRows={3}
-              disabled={saving}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: "14px",
-                },
-              }}
-            />
-
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-                gap: 1.6,
-              }}
-            >
-              <FormControl fullWidth>
-                <InputLabel>Proyecto</InputLabel>
-
-                <Select
-                  label="Proyecto"
-                  value={projectId}
-                  onChange={(event) => setProjectId(event.target.value)}
-                  disabled={saving}
-                  sx={{ borderRadius: "14px" }}
-                >
-                  <MenuItem value="">Sin proyecto</MenuItem>
-
-                  {projects.map((project) => (
-                    <MenuItem key={project.id} value={project.id}>
-                      {project.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              <FormControl fullWidth>
-                <InputLabel>Estado</InputLabel>
-
-                <Select
-                  label="Estado"
-                  value={status}
-                  onChange={(event) => setStatus(event.target.value)}
-                  disabled={saving}
-                  sx={{ borderRadius: "14px" }}
-                >
-                  {STATUSES.map((item) => (
-                    <MenuItem key={item} value={item}>
-                      {getStatusLabel(item)}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
-
-            {selectedProject && (
-              <Box
-                sx={{
-                  borderRadius: "18px",
-                  p: 1.3,
-                  backgroundColor: getSoftBackground(theme),
-                  border: `1px solid ${theme.palette.app.borderSoft}`,
-                }}
-              >
-                <Stack direction="row" alignItems="center" spacing={1.2}>
-                  <ProjectLogo
-                    color={selectedProject.color || theme.palette.primary.main}
-                    logoUrl={selectedProject.logoUrl}
-                    letter={selectedProject.name?.charAt(0)?.toUpperCase()}
-                    size={44}
-                  />
-
-                  <Box>
-                    <Typography sx={{ color: theme.palette.app.text, fontWeight: 900 }}>
-                      {selectedProject.name}
-                    </Typography>
-
-                    <Typography
-                      sx={{
-                        color: theme.palette.app.secondary,
-                        fontSize: "0.8rem",
-                        fontWeight: 650,
-                      }}
-                    >
-                      Proyecto seleccionado
-                    </Typography>
-                  </Box>
-                </Stack>
-              </Box>
-            )}
-          </Stack>
-        </DialogContent>
-
-        <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
-
-        <DialogActions sx={{ px: { xs: 2.2, md: 3 }, py: 2 }}>
-          <Button
-            onClick={onClose}
-            disabled={saving}
+        {children}
+        {count === 0 && (
+          <Box
             sx={{
-              borderRadius: "14px",
-              textTransform: "none",
-              fontWeight: 850,
+              py: 3,
+              textAlign: "center",
+              borderRadius: "12px",
+              border: `1.5px dashed ${theme.palette.app.borderSoft}`,
+              color: theme.palette.app.secondary,
+              fontSize: "0.78rem",
+              fontWeight: 600,
             }}
           >
-            Cancelar
-          </Button>
-
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={saving}
-            startIcon={editingTask ? <EditRoundedIcon /> : <AddRoundedIcon />}
-            sx={{
-              minHeight: 42,
-              px: 2.2,
-              borderRadius: "14px",
-              textTransform: "none",
-              fontWeight: 900,
-              boxShadow: "none",
-            }}
-          >
-            {saving
-              ? "Guardando..."
-              : editingTask
-              ? "Guardar cambios"
-              : "Guardar tarea"}
-          </Button>
-        </DialogActions>
-      </Box>
-    </Dialog>
+            Soltá tareas acá
+          </Box>
+        )}
+        {footer}
+      </Stack>
+    </Box>
   );
-};
-
-const DeleteDialog = ({ open, taskToDelete, onClose, onConfirm }) => {
-  const theme = useTheme();
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      fullWidth
-      maxWidth="xs"
-      PaperProps={{
-        sx: {
-          borderRadius: "24px",
-          backgroundColor: theme.palette.app.surface,
-          backgroundImage: "none",
-          border: `1px solid ${theme.palette.app.borderSoft}`,
-        },
-      }}
-    >
-      <DialogContent sx={{ px: 3, pt: 3 }}>
-        <Stack spacing={2}>
-          <Stack direction="row" alignItems="center" spacing={1.4}>
-            <Avatar
-              variant="rounded"
-              sx={{
-                width: 52,
-                height: 52,
-                borderRadius: "17px",
-                color: theme.palette.error.main,
-                backgroundColor: alpha(theme.palette.error.main, 0.11),
-                border: "1px solid",
-                borderColor: alpha(theme.palette.error.main, 0.2),
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <DeleteRoundedIcon
-                sx={{
-                  fontSize: 28,
-                  display: "block",
-                }}
-              />
-            </Avatar>
-
-            <Box sx={{ minWidth: 0 }}>
-              <Typography
-                sx={{
-                  color: theme.palette.app.text,
-                  fontSize: "1.35rem",
-                  fontWeight: 950,
-                  lineHeight: 1.15,
-                }}
-              >
-                Eliminar tarea
-              </Typography>
-
-              <Typography
-                sx={{
-                  mt: 0.45,
-                  color: theme.palette.app.secondary,
-                  lineHeight: 1.5,
-                  fontWeight: 600,
-                  fontSize: "0.9rem",
-                }}
-              >
-                Esta acción no se puede deshacer.
-              </Typography>
-            </Box>
-          </Stack>
-
-          {taskToDelete?.title && (
-            <Box
-              sx={{
-                width: "100%",
-                borderRadius: "16px",
-                p: 1.3,
-                backgroundColor: getSoftBackground(theme),
-                border: `1px solid ${theme.palette.app.borderSoft}`,
-              }}
-            >
-              <Typography
-                sx={{
-                  color: theme.palette.app.text,
-                  fontWeight: 900,
-                  textAlign: "center",
-                }}
-              >
-                {taskToDelete.title}
-              </Typography>
-            </Box>
-          )}
-        </Stack>
-      </DialogContent>
-
-      <DialogActions sx={{ px: 3, pb: 3, pt: 2 }}>
-        <Button
-          fullWidth
-          variant="outlined"
-          onClick={onClose}
-          sx={{
-            minHeight: 42,
-            borderRadius: "14px",
-            fontWeight: 900,
-            textTransform: "none",
-          }}
-        >
-          Cancelar
-        </Button>
-
-        <Button
-          fullWidth
-          variant="contained"
-          color="error"
-          startIcon={<DeleteRoundedIcon />}
-          onClick={onConfirm}
-          sx={{
-            minHeight: 42,
-            borderRadius: "14px",
-            fontWeight: 900,
-            textTransform: "none",
-            boxShadow: "none",
-          }}
-        >
-          Eliminar
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-};
+}
 
 export default Tareas;

@@ -1,1610 +1,552 @@
-//Importaciones:
-import { useEffect, useMemo, useState } from "react";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where,
-} from "firebase/firestore";
-import Box from "@mui/material/Box";
-import Card from "@mui/material/Card";
-import Chip from "@mui/material/Chip";
-import Stack from "@mui/material/Stack";
-import Alert from "@mui/material/Alert";
-import Avatar from "@mui/material/Avatar";
-import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
-import Divider from "@mui/material/Divider";
-import Tooltip from "@mui/material/Tooltip";
-import MenuItem from "@mui/material/MenuItem";
-import TextField from "@mui/material/TextField";
-import IconButton from "@mui/material/IconButton";
-import Typography from "@mui/material/Typography";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
-import FormControl from "@mui/material/FormControl";
-import InputLabel from "@mui/material/InputLabel";
-import Select from "@mui/material/Select";
-import InputAdornment from "@mui/material/InputAdornment";
-import Badge from "@mui/material/Badge";
-import { alpha, keyframes, useTheme } from "@mui/material/styles";
+//DataBase:
+import { useMemo, useState } from "react";
+import { addDoc, collection, deleteDoc, doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { Alert, Box, Card, InputAdornment, TextField, Typography } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
-import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
-import EditRoundedIcon from "@mui/icons-material/EditRounded";
-import DeleteRoundedIcon from "@mui/icons-material/DeleteRounded";
-import OpenInNewRoundedIcon from "@mui/icons-material/OpenInNewRounded";
-import StorageRoundedIcon from "@mui/icons-material/StorageRounded";
-import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
-import NoteAltRoundedIcon from "@mui/icons-material/NoteAltRounded";
-import LinkRoundedIcon from "@mui/icons-material/LinkRounded";
-import LocalFireDepartmentRoundedIcon from "@mui/icons-material/LocalFireDepartmentRounded";
-import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
-import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
 import CloudQueueRoundedIcon from "@mui/icons-material/CloudQueueRounded";
+import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
+import DeleteRoundedIcon from "@mui/icons-material/DeleteRounded";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
+import FilterAltOffRoundedIcon from "@mui/icons-material/FilterAltOffRounded";
 import FolderOpenRoundedIcon from "@mui/icons-material/FolderOpenRounded";
-import BusinessCenterRoundedIcon from "@mui/icons-material/BusinessCenterRounded";
-import DataObjectRoundedIcon from "@mui/icons-material/DataObjectRounded";
+import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
+import LinkRoundedIcon from "@mui/icons-material/LinkRounded";
+import NoteAltRoundedIcon from "@mui/icons-material/NoteAltRounded";
+import OpenInNewRoundedIcon from "@mui/icons-material/OpenInNewRounded";
+import SearchOffRoundedIcon from "@mui/icons-material/SearchOffRounded";
+import StorageRoundedIcon from "@mui/icons-material/StorageRounded";
 import { db } from "../../firebase/firebase";
 import { useAuth } from "../../context/AuthContext";
+import useUserCollection, { byCreatedDesc, byName } from "../../shared/hooks/useUserCollection";
+import { copyToClipboard, getShortUrl, normalizeUrl, projectFields } from "../../shared/utils";
+import {
+  DeleteDialog,
+  EmptyState,
+  FilterBar,
+  FilterSelect,
+  FormDialog,
+  IconAction,
+  PageAlert,
+  PageHeader,
+  PageShell,
+  ProjectAvatar,
+  ProjectSelect,
+  SearchField,
+  Section,
+  SoftButton,
+  Stack,
+  StatsGrid,
+  Toast,
+  getCardStyles,
+  getSoftBackground,
+  getSoftFadeSx,
+  projectFilterOptions,
+  roundedFieldSx,
+  softTint,
+  useToast,
+} from "../../shared/ui";
 
-//JSX:
-//Animaciones:
-const fadeInUp = keyframes`
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
+const EMPTY_FORM = { projectId: "", firebaseUrl: "", notes: "" };
+const FIREBASE_COLOR = "#F57C00";
+const dbRef = (id) => doc(db, "databasesInfo", id);
 
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-`;
+const getFirebaseProjectId = (url) => String(url || "").match(/\/project\/([^/?#]+)/)?.[1] || null;
 
-const softFadeIn = keyframes`
-  from {
-    opacity: 0;
-    transform: scale(0.985);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-`;
-
-const getFadeInSx = (delay = 0) => ({
-  opacity: 0,
-  animation: `${fadeInUp} 420ms ease forwards`,
-  animationDelay: `${delay}ms`,
-});
-
-const getSoftFadeSx = (delay = 0) => ({
-  opacity: 0,
-  animation: `${softFadeIn} 380ms ease forwards`,
-  animationDelay: `${delay}ms`,
-});
-
-const hexToRgba = (hex, opacity = 1) => {
-  const clean = String(hex || "").replace("#", "");
-
-  const full =
-    clean.length === 3
-      ? clean
-          .split("")
-          .map((character) => character + character)
-          .join("")
-      : clean;
-
-  const r = parseInt(full.slice(0, 2), 16);
-  const g = parseInt(full.slice(2, 4), 16);
-  const b = parseInt(full.slice(4, 6), 16);
-
-  if ([r, g, b].some((value) => Number.isNaN(value))) {
-    return `rgba(37, 99, 235, ${opacity})`;
-  }
-
-  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-};
-
-function getProjectIconBackground(theme, projectColor) {
-  if (theme.palette.mode === "dark") {
-    return alpha("#F8FAFC", 0.94);
-  }
-
-  return hexToRgba(projectColor || theme.palette.primary.main, 0.1);
-}
-
-function getProjectIconBorder(theme, projectColor) {
-  if (theme.palette.mode === "dark") {
-    return hexToRgba(projectColor || theme.palette.primary.main, 0.38);
-  }
-
-  return hexToRgba(projectColor || theme.palette.primary.main, 0.18);
-}
-
-function getGlassCardStyles(theme) {
-  return {
-    borderRadius: "22px",
-    border: `1px solid ${theme.palette.app?.borderSoft || alpha(theme.palette.divider, 0.8)}`,
-    backgroundColor: theme.palette.app?.surface || theme.palette.background.paper,
-    backgroundImage: "none",
-    boxShadow:
-      theme.palette.mode === "dark"
-        ? "0 18px 48px rgba(0, 0, 0, 0.16)"
-        : "0 16px 42px rgba(15, 23, 42, 0.045)",
-  };
-}
-function normalizeUrl(value) {
-  const clean = String(value || "").trim();
-
-  if (!clean) return "";
-
-  if (clean.startsWith("http://") || clean.startsWith("https://")) {
-    return clean;
-  }
-
-  return `https://${clean}`;
-}
-
-function getShortUrl(value) {
-  const clean = String(value || "").trim();
-
-  if (!clean) return "Sin enlace";
-
-  return clean
-    .replace("https://", "")
-    .replace("http://", "")
-    .replace("console.firebase.google.com/", "firebase.google.com/");
-}
+const matchesSearch = (item, query) =>
+  !query ||
+  [item.projectName, item.firebaseUrl, item.notes]
+    .filter(Boolean)
+    .some((value) => value.toLowerCase().includes(query));
 
 export default function DataBase() {
   const theme = useTheme();
   const { user } = useAuth();
+  const [projects] = useUserCollection("projects", { sort: byName });
+  const [databases, loading, loadError] = useUserCollection("databasesInfo", {
+    sort: byCreatedDesc,
+    errorMessage: "No se pudieron cargar los enlaces.",
+  });
 
-  const [projects, setProjects] = useState([]);
-  const [databases, setDatabases] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const [databaseDialogOpen, setDatabaseDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
-  const [editingDatabase, setEditingDatabase] = useState(null);
-  const [databaseToDelete, setDatabaseToDelete] = useState(null);
-
-  const [projectId, setProjectId] = useState("");
-  const [firebaseUrl, setFirebaseUrl] = useState("");
-  const [notes, setNotes] = useState("");
-
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [editing, setEditing] = useState(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [toDelete, setToDelete] = useState(null);
+  const [filterProject, setFilterProject] = useState("todos");
+  const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
   const [pageError, setPageError] = useState("");
+  const [toast, showToast, closeToast] = useToast();
 
-  useEffect(() => {
-    if (!user?.uid) return;
-
-    const projectsQuery = query(
-      collection(db, "projects"),
-      where("userId", "==", user.uid)
-    );
-
-    const databasesQuery = query(
-      collection(db, "databasesInfo"),
-      where("userId", "==", user.uid)
-    );
-
-    const unsubscribeProjects = onSnapshot(
-      projectsQuery,
-      (snapshot) => {
-        const data = snapshot.docs
-          .map((document) => ({
-            id: document.id,
-            ...document.data(),
-          }))
-          .sort((a, b) => {
-            const nameA = String(a.name || "").toLowerCase();
-            const nameB = String(b.name || "").toLowerCase();
-            return nameA.localeCompare(nameB);
-          });
-
-        setProjects(data);
-      },
-      (error) => {
-        console.log(error);
-        setPageError("No se pudieron cargar los proyectos.");
-      }
-    );
-
-    const unsubscribeDatabases = onSnapshot(
-      databasesQuery,
-      (snapshot) => {
-        const data = snapshot.docs
-          .map((document) => ({
-            id: document.id,
-            ...document.data(),
-          }))
-          .sort((a, b) => {
-            const dateA = a.createdAt?.seconds || 0;
-            const dateB = b.createdAt?.seconds || 0;
-            return dateB - dateA;
-          });
-
-        setDatabases(data);
-        setLoading(false);
-      },
-      (error) => {
-        console.log(error);
-        setDatabases([]);
-        setLoading(false);
-        setPageError("No se pudieron cargar los enlaces.");
-      }
-    );
-
-    return () => {
-      unsubscribeProjects();
-      unsubscribeDatabases();
-    };
-  }, [user]);
-
-  const selectedProject = useMemo(() => {
-    return projects.find((project) => project.id === projectId) || null;
-  }, [projects, projectId]);
+  const query = search.trim().toLowerCase();
+  const filtered = useMemo(
+    () =>
+      databases.filter(
+        (item) =>
+          (filterProject === "todos" || item.projectId === filterProject) &&
+          matchesSearch(item, query),
+      ),
+    [databases, filterProject, query],
+  );
+  const hasFilters = filterProject !== "todos" || Boolean(query);
+  const resetFilters = () => {
+    setFilterProject("todos");
+    setSearch("");
+  };
 
   const stats = useMemo(() => {
-    const projectsWithDatabase = new Set(
-      databases
-        .map((item) => item.projectId)
-        .filter(Boolean)
-    ).size;
-
-    return {
-      totalDatabases: databases.length,
-      totalProjects: projects.length,
-      projectsWithDatabase,
-      projectsWithoutDatabase: Math.max(projects.length - projectsWithDatabase, 0),
-    };
+    const withDatabase = new Set(databases.map((item) => item.projectId).filter(Boolean)).size;
+    return { withDatabase, withoutDatabase: Math.max(projects.length - withDatabase, 0) };
   }, [databases, projects]);
 
-  function resetForm() {
-    setEditingDatabase(null);
-    setProjectId("");
-    setFirebaseUrl("");
-    setNotes("");
-    setPageError("");
-  }
+  const duplicate =
+    form.projectId &&
+    databases.some((item) => item.projectId === form.projectId && item.id !== editing?.id);
 
-  function openCreateDialog() {
-    resetForm();
-    setDatabaseDialogOpen(true);
-  }
+  const openForm = (item = null) => {
+    setEditing(item);
+    setForm(
+      item
+        ? {
+            projectId: item.projectId || "",
+            firebaseUrl: item.firebaseUrl || "",
+            notes: item.notes || "",
+          }
+        : EMPTY_FORM,
+    );
+    setFormError("");
+    setFormOpen(true);
+  };
 
-  function openEditDialog(item) {
-    setEditingDatabase(item);
-    setProjectId(item.projectId || "");
-    setFirebaseUrl(item.firebaseUrl || "");
-    setNotes(item.notes || "");
-    setPageError("");
-    setDatabaseDialogOpen(true);
-  }
+  const closeForm = () => !saving && setFormOpen(false);
 
-  function closeDatabaseDialog() {
-    resetForm();
-    setDatabaseDialogOpen(false);
-  }
-
-  function openDeleteDialog(item) {
-    setDatabaseToDelete(item);
-    setDeleteDialogOpen(true);
-  }
-
-  function closeDeleteDialog() {
-    setDatabaseToDelete(null);
-    setDeleteDialogOpen(false);
-  }
-
-  function openFirebaseLink(item) {
+  const openFirebaseLink = (item) => {
     const url = normalizeUrl(item.firebaseUrl);
-
-    if (!url) {
-      setPageError("Este proyecto no tiene enlace cargado.");
-      return;
-    }
-
+    if (!url) return setPageError("Este proyecto no tiene enlace cargado.");
     window.open(url, "_blank", "noopener,noreferrer");
-  }
+  };
 
-  async function handleSaveDatabase(event) {
+  const copyLink = async (item) => {
+    const copied = await copyToClipboard(normalizeUrl(item.firebaseUrl));
+    showToast(copied ? "Enlace copiado al portapapeles." : "No se pudo copiar el enlace.", {
+      severity: copied ? "success" : "error",
+    });
+  };
+
+  const handleSave = async (event) => {
     event?.preventDefault();
+    if (!form.projectId) return setFormError("Seleccioná un proyecto.");
+    if (!form.firebaseUrl.trim()) return setFormError("Pegá el enlace de Firebase.");
 
-    if (!projectId) {
-      setPageError("Seleccioná un proyecto.");
-      return;
-    }
-
-    if (!firebaseUrl.trim()) {
-      setPageError("Pegá el enlace de Firebase.");
-      return;
-    }
+    const payload = {
+      userId: user.uid,
+      ...projectFields(projects.find((project) => project.id === form.projectId)),
+      firebaseUrl: normalizeUrl(form.firebaseUrl),
+      notes: form.notes.trim(),
+      updatedAt: serverTimestamp(),
+    };
 
     try {
       setSaving(true);
-      setPageError("");
-
-      const payload = {
-        userId: user.uid,
-        projectId,
-        projectName: selectedProject?.name || "",
-        projectColor: selectedProject?.color || null,
-        projectLogoUrl: selectedProject?.logoUrl || null,
-        firebaseUrl: normalizeUrl(firebaseUrl),
-        notes: notes.trim(),
-        updatedAt: serverTimestamp(),
-      };
-
-      if (editingDatabase) {
-        await updateDoc(doc(db, "databasesInfo", editingDatabase.id), payload);
-      } else {
-        await addDoc(collection(db, "databasesInfo"), {
-          ...payload,
-          createdAt: serverTimestamp(),
-        });
-      }
-
-      closeDatabaseDialog();
+      setFormError("");
+      if (editing) await updateDoc(dbRef(editing.id), payload);
+      else
+        await addDoc(collection(db, "databasesInfo"), { ...payload, createdAt: serverTimestamp() });
+      setFormOpen(false);
+      showToast(editing ? "Enlace actualizado." : "Enlace guardado.");
     } catch (error) {
-      console.log(error);
-      setPageError("No se pudo guardar la base de datos.");
+      console.error(error);
+      setFormError("No se pudo guardar la base de datos.");
     } finally {
       setSaving(false);
     }
-  }
+  };
 
-  async function confirmDeleteDatabase() {
-    if (!databaseToDelete?.id) return;
-
+  const confirmDelete = async () => {
     try {
-      await deleteDoc(doc(db, "databasesInfo", databaseToDelete.id));
-      closeDeleteDialog();
+      await deleteDoc(dbRef(toDelete.id));
+      setToDelete(null);
     } catch (error) {
-      console.log(error);
+      console.error(error);
       setPageError("No se pudo eliminar el enlace.");
     }
-  }
+  };
 
   return (
-    <Box
-      sx={{
-        position: "relative",
-        width: "100%",
-        maxWidth: 1280,
-        mx: "auto",
-        px: { xs: 0, sm: 1, lg: 2 },
-        pb: { xs: 4, md: 6 },
-      }}
-    >
-      <Stack spacing={{ xs: 2.3, md: 3 }}>
-        {!loading && (
-          <>
-            <Box sx={getFadeInSx(0)}>
-              <PageHeader onCreate={openCreateDialog} stats={stats} />
-            </Box>
-
-            {pageError ? (
-              <Alert
-                severity="error"
-                sx={{
-                  ...getFadeInSx(40),
-                  borderRadius: 3,
-                  border: "1px solid",
-                  borderColor: alpha(theme.palette.error.main, 0.2),
-                  fontWeight: 700,
-                }}
-              >
-                {pageError}
-              </Alert>
-            ) : null}
-
-            {databases.length === 0 ? (
-              <>
-                <Box sx={getFadeInSx(70)}>
-                  <StatsGrid stats={stats} />
-                </Box>
-
-                <Box sx={getFadeInSx(140)}>
-                  <EmptyState onCreate={openCreateDialog} />
-                </Box>
-              </>
-            ) : (
-              <>
-                <Box sx={getFadeInSx(70)}>
-                  <StatsGrid stats={stats} />
-                </Box>
-
-                <Box sx={getFadeInSx(140)}>
-                  <ListHeader count={databases.length} />
-                </Box>
-
-                <Box
-                  sx={{
-                    ...getFadeInSx(210),
-                    display: "grid",
-                    gridTemplateColumns: {
-                      xs: "1fr",
-                      lg: "repeat(2, 1fr)",
-                    },
-                    gap: { xs: 1.6, md: 2 },
-                  }}
-                >
-                  {databases.map((item, index) => (
-                    <DatabaseCard
-                      key={item.id}
-                      item={item}
-                      delay={index * 45}
-                      onOpen={() => openFirebaseLink(item)}
-                      onEdit={() => openEditDialog(item)}
-                      onDelete={() => openDeleteDialog(item)}
-                    />
-                  ))}
-                </Box>
-              </>
-            )}
-          </>
-        )}
-      </Stack>
-
-      <DatabaseFormDialog
-        open={databaseDialogOpen}
-        editingDatabase={editingDatabase}
-        projects={projects}
-        selectedProject={selectedProject}
-        projectId={projectId}
-        setProjectId={setProjectId}
-        firebaseUrl={firebaseUrl}
-        setFirebaseUrl={setFirebaseUrl}
-        notes={notes}
-        setNotes={setNotes}
-        saving={saving}
-        pageError={pageError}
-        onClose={closeDatabaseDialog}
-        onSave={handleSaveDatabase}
-      />
-
-      <DeleteDialog
-        open={deleteDialogOpen}
-        databaseToDelete={databaseToDelete}
-        onClose={closeDeleteDialog}
-        onConfirm={confirmDeleteDatabase}
-      />
-    </Box>
-  );
-}
-
-function BackgroundGlow() {
-  const theme = useTheme();
-
-  return (
-    <Box
-      aria-hidden
-      sx={{
-        position: "absolute",
-        inset: 0,
-        pointerEvents: "none",
-        zIndex: -1,
-        overflow: "hidden",
-      }}
-    >
-      <Box
-        sx={{
-          position: "absolute",
-          top: -130,
-          right: -150,
-          width: 380,
-          height: 380,
-          borderRadius: "50%",
-          bgcolor:
-            theme.palette.mode === "dark"
-              ? alpha(theme.palette.warning.main, 0.12)
-              : alpha(theme.palette.warning.main, 0.08),
-          filter: "blur(65px)",
-        }}
-      />
-
-      <Box
-        sx={{
-          position: "absolute",
-          top: 340,
-          left: -190,
-          width: 340,
-          height: 340,
-          borderRadius: "50%",
-          bgcolor:
-            theme.palette.mode === "dark"
-              ? alpha(theme.palette.info.main, 0.1)
-              : alpha(theme.palette.info.main, 0.08),
-          filter: "blur(70px)",
-        }}
-      />
-    </Box>
-  );
-}
-
-function PageHeader({ onCreate }) {
-  const theme = useTheme();
-
-  return (
-    <Card
-      variant="outlined"
-      sx={{
-        ...getGlassCardStyles(theme),
-        px: { xs: 2.2, md: 3 },
-        py: { xs: 2.3, md: 3 },
-      }}
-    >
-      <Stack
-        direction={{ xs: "column", md: "row" }}
-        alignItems={{ xs: "stretch", md: "center" }}
-        justifyContent="space-between"
-        spacing={{ xs: 2.4, md: 3 }}
-      >
-        <Stack
-            direction="row"
-            spacing={1.7}
-            alignItems="center"
-            sx={{
-              flex: 1,
-              minWidth: 0,
-            }}
+    <PageShell
+      loading={loading}
+      after={
+        <>
+          <FormDialog
+            open={formOpen}
+            onClose={closeForm}
+            onSubmit={handleSave}
+            saving={saving}
+            error={formError}
+            maxWidth="sm"
+            icon={editing ? <EditRoundedIcon /> : <StorageRoundedIcon />}
+            iconColor={FIREBASE_COLOR}
+            title={editing ? "Editar enlace" : "Nuevo enlace Firebase"}
+            subtitle="Acceso directo a la consola de Firebase de un proyecto."
+            submitIcon={editing ? <EditRoundedIcon /> : <AddRoundedIcon />}
+            submitLabel={editing ? "Guardar cambios" : "Guardar enlace"}
+            submitDisabled={projects.length === 0}
           >
-          <Avatar
-            variant="rounded"
-            sx={{
-              width: { xs: 54, md: 60 },
-              height: { xs: 54, md: 60 },
-              borderRadius: "18px",
-              color: theme.palette.primary.main,
-              bgcolor: theme.palette.app?.primarySoft || alpha(theme.palette.primary.main, 0.1),
-              border: `1px solid ${theme.palette.app?.borderSoft || alpha(theme.palette.primary.main, 0.16)}`,
-              flexShrink: 0,
-            }}
-          >
-            <StorageRoundedIcon sx={{ fontSize: { xs: 28, md: 32 } }} />
-          </Avatar>
-
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
-              variant="h4"
-              sx={{
-                color: theme.palette.app?.text || theme.palette.text.primary,
-                fontWeight: 950,
-                letterSpacing: "-0.6px",
-                fontSize: { xs: "1.65rem", md: "2.25rem" },
-                lineHeight: 1.05,
-              }}
-            >
-              Base de datos
-            </Typography>
-
-            <Typography
-              sx={{
-                mt: 0.85,
-                maxWidth: 700,
-                color: theme.palette.app?.secondary || theme.palette.text.secondary,
-                fontSize: { xs: "0.92rem", md: "1rem" },
-                lineHeight: 1.65,
-                fontWeight: 600,
-              }}
-            >
-              Guardá accesos directos a Firebase Console por proyecto y notas rápidas para no perder detalles importantes.
-            </Typography>
-          </Box>
-        </Stack>
-
-        <Button
-          variant="contained"
-          startIcon={<AddRoundedIcon />}
-          onClick={onCreate}
-          sx={{
-            alignSelf: {
-              xs: "stretch",
-              md: "center",
-            },
-            ml: {
-              xs: 0,
-              md: "auto",
-            },
-            flexShrink: 0,
-            minHeight: 42,
-            px: 1.7,
-            py: 0,
-            borderRadius: "13px",
-            fontWeight: 900,
-            textTransform: "none",
-            whiteSpace: "nowrap",
-            boxShadow: "none",
-            fontSize: "0.84rem",
-            "& .MuiButton-startIcon": {
-              mr: 0.55,
-            },
-          }}
-        >
-          Nuevo enlace
-        </Button>
-      </Stack>
-    </Card>
-  );
-}
-function StatsGrid({ stats }) {
-  const theme = useTheme();
-
-  const items = [
-    {
-      label: "Enlaces",
-      value: stats.totalDatabases,
-      icon: <StorageRoundedIcon />,
-      color: theme.palette.primary.main,
-    },
-    {
-      label: "Proyectos",
-      value: stats.totalProjects,
-      icon: <FolderRoundedIcon />,
-      color: theme.palette.primary.main,
-    },
-    {
-      label: "Con Firebase",
-      value: stats.projectsWithDatabase,
-      icon: <CloudQueueRoundedIcon />,
-      color: theme.palette.info.main,
-    },
-    {
-      label: "Sin enlace",
-      value: stats.projectsWithoutDatabase,
-      icon: <FolderOpenRoundedIcon />,
-      color: theme.palette.text.secondary,
-    },
-  ];
-
-  return (
-    <Box
-      sx={{
-        display: "grid",
-        gridTemplateColumns: {
-          xs: "1fr 1fr",
-          md: "repeat(4, 1fr)",
-        },
-        gap: { xs: 1.3, md: 1.8 },
-      }}
-    >
-      {items.map((item, index) => (
-        <Card
-          key={item.label}
-          variant="outlined"
-          sx={{
-            ...getGlassCardStyles(theme),
-            ...getSoftFadeSx(index * 45),
-            borderRadius: "20px",
-            p: { xs: 1.6, md: 1.9 },
-            boxShadow: "none",
-            transition: "0.18s ease",
-            "&:hover": {
-              transform: "translateY(-2px)",
-              borderColor: alpha(item.color, 0.28),
-            },
-          }}
-        >
-          <Stack direction="row" alignItems="center" spacing={1.3}>
-            <Avatar
-              variant="rounded"
-              sx={{
-                width: { xs: 40, md: 44 },
-                height: { xs: 40, md: 44 },
-                borderRadius: "15px",
-                color: item.color,
-                bgcolor: alpha(item.color, theme.palette.mode === "dark" ? 0.16 : 0.1),
-              }}
-            >
-              {item.icon}
-            </Avatar>
-
-            <Box sx={{ minWidth: 0 }}>
-              <Typography
-                sx={{
-                  color: theme.palette.app?.text || theme.palette.text.primary,
-                  fontSize: { xs: "1.45rem", md: "1.75rem" },
-                  lineHeight: 1,
-                  fontWeight: 950,
-                  letterSpacing: "-0.6px",
-                }}
-              >
-                {item.value}
-              </Typography>
-
-              <Typography
-                noWrap
-                sx={{
-                  mt: 0.55,
-                  color: theme.palette.app?.secondary || theme.palette.text.secondary,
-                  fontSize: "0.78rem",
-                  fontWeight: 850,
-                }}
-              >
-                {item.label}
-              </Typography>
-            </Box>
-          </Stack>
-        </Card>
-      ))}
-    </Box>
-  );
-}
-function ListHeader({ count }) {
-  const theme = useTheme();
-
-  return (
-    <Stack
-      direction={{ xs: "column", sm: "row" }}
-      alignItems={{ xs: "flex-start", sm: "center" }}
-      justifyContent="space-between"
-      spacing={1}
-      sx={{ px: { xs: 0.2, md: 0.4 } }}
-    >
-      <Stack direction="row" alignItems="center" spacing={1}>
-        <Avatar
-          variant="rounded"
-          sx={{
-            width: 32,
-            height: 32,
-            borderRadius: "12px",
-            color: theme.palette.primary.main,
-            bgcolor: theme.palette.app?.primarySoft || alpha(theme.palette.primary.main, 0.1),
-          }}
-        >
-          <StorageRoundedIcon sx={{ fontSize: 18 }} />
-        </Avatar>
-
-        <Box>
-          <Typography
-            sx={{
-              color: theme.palette.app?.text || theme.palette.text.primary,
-              fontSize: { xs: 12, md: 13 },
-              fontWeight: 950,
-              letterSpacing: 0.5,
-              textTransform: "uppercase",
-            }}
-          >
-            {count} enlaces guardados
-          </Typography>
-
-          <Typography
-            sx={{
-              color: theme.palette.app?.secondary || theme.palette.text.secondary,
-              fontSize: 12.5,
-              fontWeight: 650,
-            }}
-          >
-            Ordenados por creación más reciente.
-          </Typography>
-        </Box>
-      </Stack>
-    </Stack>
-  );
-}
-function DatabaseCard({ item, delay = 0, onOpen, onEdit, onDelete }) {
-  const theme = useTheme();
-
-  return (
-    <Card
-      variant="outlined"
-      sx={{
-        ...getGlassCardStyles(theme),
-        ...getSoftFadeSx(delay),
-        borderRadius: "22px",
-        overflow: "hidden",
-        boxShadow: "none",
-        transition: "0.18s ease",
-        "&:hover": {
-          transform: "translateY(-2px)",
-          borderColor: alpha(theme.palette.primary.main, 0.28),
-        },
-      }}
-    >
-      <Box sx={{ p: { xs: 1.8, md: 2.2 } }}>
-        <Stack direction="row" alignItems="flex-start" spacing={1.8}>
-          <ProjectIcon item={item} size={64} />
-
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography
-              noWrap
-              sx={{
-                color: theme.palette.app?.text || theme.palette.text.primary,
-                fontSize: { xs: "1.08rem", md: "1.28rem" },
-                fontWeight: 950,
-                letterSpacing: "-0.3px",
-                lineHeight: 1.2,
-              }}
-            >
-              {item.projectName || "Proyecto sin nombre"}
-            </Typography>
-
-            <Stack direction="row" alignItems="center" spacing={0.8} sx={{ mt: 0.65 }}>
-              <BusinessCenterRoundedIcon
-                sx={{
-                  fontSize: 17,
-                  color: theme.palette.app?.secondary || theme.palette.text.secondary,
-                  flexShrink: 0,
-                }}
-              />
-
-              <Typography
-                noWrap
-                sx={{
-                  color: theme.palette.app?.secondary || theme.palette.text.secondary,
-                  fontSize: { xs: "0.82rem", md: "0.9rem" },
-                  fontWeight: 750,
-                  minWidth: 0,
-                }}
-              >
-                Acceso directo a Firebase Console
-              </Typography>
-            </Stack>
-          </Box>
-        </Stack>
-
-        <Box
-          sx={{
-            mt: 1.8,
-            borderRadius: "18px",
-            border: `1px solid ${theme.palette.app?.borderSoft || alpha(theme.palette.divider, 0.8)}`,
-            bgcolor:
-              theme.palette.mode === "dark"
-                ? alpha("#FFFFFF", 0.035)
-                : alpha("#0F172A", 0.025),
-            p: 1.45,
-          }}
-        >
-          <Stack direction="row" alignItems="flex-start" spacing={1.2}>
-            <LinkRoundedIcon
-              sx={{
-                color: theme.palette.app?.secondary || theme.palette.text.secondary,
-                mt: 0.1,
-                fontSize: 20,
-              }}
-            />
-
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography
-                noWrap
-                sx={{
-                  color: theme.palette.app?.text || theme.palette.text.primary,
-                  fontSize: { xs: "0.84rem", md: "0.9rem" },
-                  fontWeight: 900,
-                }}
-              >
-                {getShortUrl(item.firebaseUrl)}
-              </Typography>
-
-              <Typography
-                sx={{
-                  mt: 0.3,
-                  color: theme.palette.app?.secondary || theme.palette.text.secondary,
-                  fontSize: "0.78rem",
-                  fontWeight: 650,
-                }}
-              >
-                Enlace normalizado y listo para abrir.
-              </Typography>
-            </Box>
-          </Stack>
-        </Box>
-
-        {item.notes ? (
-          <Stack
-            direction="row"
-            alignItems="flex-start"
-            spacing={1.2}
-            sx={{
-              mt: 1.2,
-              borderRadius: "18px",
-              border: `1px solid ${theme.palette.app?.borderSoft || alpha(theme.palette.divider, 0.8)}`,
-              bgcolor:
-                theme.palette.mode === "dark"
-                  ? alpha("#FFFFFF", 0.035)
-                  : alpha("#0F172A", 0.025),
-              p: 1.45,
-            }}
-          >
-            <NoteAltRoundedIcon
-              sx={{
-                color: theme.palette.app?.secondary || theme.palette.text.secondary,
-                fontSize: 20,
-              }}
-            />
-
-            <Typography
-              sx={{
-                flex: 1,
-                color: theme.palette.app?.secondary || theme.palette.text.secondary,
-                fontSize: { xs: "0.86rem", md: "0.94rem" },
-                lineHeight: 1.55,
-                fontWeight: 600,
-                display: "-webkit-box",
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: "vertical",
-                overflow: "hidden",
-              }}
-            >
-              {item.notes}
-            </Typography>
-          </Stack>
-        ) : null}
-
-        <Divider sx={{ my: 1.8, borderColor: theme.palette.app?.borderSoft }} />
-
-        <Stack
-          direction="row"
-          alignItems="center"
-          justifyContent="space-between"
-          spacing={1.5}
-          sx={{ width: "100%" }}
-        >
-          <Button
-            variant="outlined"
-            startIcon={<OpenInNewRoundedIcon />}
-            onClick={onOpen}
-            sx={{
-              minHeight: 40,
-              px: 1.8,
-              borderRadius: "14px",
-              color: theme.palette.primary.main,
-              borderColor: alpha(theme.palette.primary.main, 0.28),
-              bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.08 : 0.055),
-              fontWeight: 900,
-              textTransform: "none",
-              whiteSpace: "nowrap",
-              "&:hover": {
-                borderColor: theme.palette.primary.main,
-                bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.14 : 0.1),
-              },
-            }}
-          >
-            Abrir Firebase
-          </Button>
-
-          <Stack direction="row" justifyContent="flex-end" spacing={1} sx={{ ml: "auto" }}>
-            <Tooltip title="Editar">
-              <IconButton
-                onClick={onEdit}
-                sx={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: "14px",
-                  bgcolor:
-                    theme.palette.mode === "dark"
-                      ? alpha("#FFFFFF", 0.06)
-                      : alpha(theme.palette.primary.main, 0.08),
-                  color: theme.palette.primary.main,
-                  "&:hover": {
-                    bgcolor: alpha(theme.palette.primary.main, 0.16),
-                  },
-                }}
-              >
-                <EditRoundedIcon />
-              </IconButton>
-            </Tooltip>
-
-            <Tooltip title="Eliminar">
-              <IconButton
-                onClick={onDelete}
-                sx={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: "14px",
-                  bgcolor: alpha(theme.palette.error.main, 0.1),
-                  color: theme.palette.error.main,
-                  "&:hover": {
-                    bgcolor: alpha(theme.palette.error.main, 0.18),
-                  },
-                }}
-              >
-                <DeleteRoundedIcon />
-              </IconButton>
-            </Tooltip>
-          </Stack>
-        </Stack>
-      </Box>
-    </Card>
-  );
-}
-function ProjectIcon({ item, size = 56 }) {
-  const theme = useTheme();
-
-  const color = item?.projectColor || item?.color || theme.palette.primary.main;
-  const logoUrl = item?.projectLogoUrl || item?.logoUrl;
-
-  return (
-    <Box
-      sx={{
-        width: { xs: size - 8, md: size },
-        height: { xs: size - 8, md: size },
-        flexShrink: 0,
-        borderRadius: "18px",
-        border: "1px solid",
-        borderColor: getProjectIconBorder(theme, color),
-        bgcolor: getProjectIconBackground(theme, color),
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        overflow: "hidden",
-        boxShadow:
-          theme.palette.mode === "dark"
-            ? "0 10px 22px rgba(0,0,0,0.22)"
-            : `0 10px 22px ${alpha(color, 0.1)}`,
-      }}
-    >
-      {logoUrl ? (
-        <Box
-          component="img"
-          src={logoUrl}
-          alt={item?.projectName || "Proyecto"}
-          sx={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-          }}
-        />
-      ) : (
-        <Typography
-          sx={{
-            color,
-            fontSize: { xs: "1.45rem", md: "1.75rem" },
-            fontWeight: 950,
-          }}
-        >
-          {(item?.projectName || item?.name || "P").charAt(0).toUpperCase()}
-        </Typography>
-      )}
-    </Box>
-  );
-}
-function EmptyState({ onCreate }) {
-  const theme = useTheme();
-
-  return (
-    <Card
-      variant="outlined"
-      sx={{
-        ...getGlassCardStyles(theme),
-        ...getSoftFadeSx(40),
-        borderRadius: "22px",
-        overflow: "hidden",
-        boxShadow: "none",
-      }}
-    >
-      <Stack alignItems="center" sx={{ p: { xs: 3, md: 5 } }}>
-        <Avatar
-          variant="rounded"
-          sx={{
-            width: { xs: 68, md: 82 },
-            height: { xs: 68, md: 82 },
-            borderRadius: 3.2,
-            bgcolor: alpha(theme.palette.primary.main, 0.1),
-            color: "primary.main",
-            mb: 2.2,
-            border: "1px solid",
-            borderColor: alpha(theme.palette.primary.main, 0.16),
-          }}
-        >
-          <StorageRoundedIcon sx={{ fontSize: { xs: 34, md: 42 } }} />
-        </Avatar>
-
-        <Typography
-          sx={{
-            fontSize: { xs: 22, md: 28 },
-            fontWeight: 950,
-            letterSpacing: -0.5,
-            textAlign: "center",
-          }}
-        >
-          Sin bases guardadas
-        </Typography>
-
-        <Typography
-          color="text.secondary"
-          sx={{
-            mt: 1,
-            mb: 2.8,
-            maxWidth: 540,
-            textAlign: "center",
-            lineHeight: 1.7,
-            fontWeight: 600,
-          }}
-        >
-          Agregá un proyecto y pegá su enlace de Firebase Console para acceder
-          rápido cuando lo necesites.
-        </Typography>
-
-        <Button
-          variant="contained"
-          startIcon={<AddRoundedIcon />}
-          onClick={onCreate}
-          sx={{
-            minHeight: 48,
-            px: 2.6,
-            borderRadius: 2.8,
-            fontWeight: 950,
-            textTransform: "none",
-          }}
-        >
-          Nuevo enlace
-        </Button>
-      </Stack>
-    </Card>
-  );
-}
-
-function DatabaseFormDialog({
-  open,
-  editingDatabase,
-  projects,
-  selectedProject,
-  projectId,
-  setProjectId,
-  firebaseUrl,
-  setFirebaseUrl,
-  notes,
-  setNotes,
-  saving,
-  pageError,
-  onClose,
-  onSave,
-}) {
-  const theme = useTheme();
-
-  return (
-    <Dialog
-      open={open}
-      onClose={saving ? undefined : onClose}
-      fullWidth
-      maxWidth="md"
-      PaperProps={{
-        sx: {
-          borderRadius: "20px",
-          bgcolor: "background.paper",
-          border: "1px solid",
-          borderColor:
-            theme.palette.mode === "dark"
-              ? alpha("#FFFFFF", 0.1)
-              : alpha("#0F172A", 0.08),
-          boxShadow:
-            theme.palette.mode === "dark"
-              ? "0 28px 90px rgba(0,0,0,0.55)"
-              : "0 28px 80px rgba(15,23,42,0.18)",
-          overflow: "hidden",
-        },
-      }}
-    >
-      <Box component="form" onSubmit={onSave}>
-        <DialogTitle
-          sx={{
-            position: "relative",
-            px: { xs: 2.2, md: 3 },
-            pt: { xs: 2.2, md: 3 },
-            pb: 2,
-            pr: 7,
-          }}
-        >
-          <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={2}>
-            <Stack direction="row" spacing={1.6} alignItems="flex-start">
-              <Avatar
-                variant="rounded"
-                sx={{
-                  width: 52,
-                  height: 52,
-                  borderRadius: "14px",
-                  color: "primary.main",
-                  bgcolor: alpha(theme.palette.primary.main, 0.1),
-                  border: "1px solid",
-                  borderColor: alpha(theme.palette.primary.main, 0.16),
-                }}
-              >
-                {editingDatabase ? <EditRoundedIcon /> : <AddRoundedIcon />}
-              </Avatar>
-
-              <Box>
-                <Typography variant="h5" sx={{ fontWeight: 950, letterSpacing: -0.35 }}>
-                  {editingDatabase ? "Editar enlace" : "Nuevo enlace Firebase"}
-                </Typography>
-
-                <Typography
-                  color="text.secondary"
-                  sx={{ mt: 0.4, fontWeight: 600, lineHeight: 1.5 }}
-                >
-                  Vinculá un proyecto con su acceso directo a Firebase Console.
-                </Typography>
-              </Box>
-            </Stack>
-
-            <IconButton
-              onClick={onClose}
-              disabled={saving}
-              sx={{
-                position: "absolute",
-                top: 16,
-                right: 16,
-                width: 38,
-                height: 38,
-                borderRadius: "12px",
-                color: theme.palette.text.secondary,
-                bgcolor:
-                  theme.palette.mode === "dark"
-                    ? alpha("#FFFFFF", 0.05)
-                    : alpha("#0F172A", 0.04),
-                border: "1px solid",
-                borderColor:
-                  theme.palette.mode === "dark"
-                    ? alpha("#FFFFFF", 0.08)
-                    : alpha("#0F172A", 0.08),
-                "&:hover": {
-                  color: theme.palette.primary.main,
-                  bgcolor: alpha(theme.palette.primary.main, 0.1),
-                },
-              }}
-            >
-              <CloseRoundedIcon />
-            </IconButton>
-          </Stack>
-        </DialogTitle>
-
-        <Divider />
-
-        <DialogContent sx={{ px: { xs: 2.2, md: 3 }, py: { xs: 2.4, md: 3 } }}>
-          <Stack spacing={2.4}>
-            {pageError ? (
-              <Alert severity="error" sx={{ borderRadius: "14px", fontWeight: 700 }}>
-                {pageError}
-              </Alert>
-            ) : null}
-
             {projects.length === 0 ? (
-              <Alert severity="warning" sx={{ borderRadius: "14px", fontWeight: 700 }}>
-                Primero necesitás crear un proyecto para guardar su enlace de
-                Firebase.
+              <Alert severity="warning" sx={{ borderRadius: "14px", fontWeight: 650 }}>
+                Primero necesitás crear un proyecto para guardar su enlace de Firebase.
               </Alert>
             ) : (
-              <FormControl fullWidth>
-                <InputLabel>Proyecto</InputLabel>
-
-                <Select
-                  label="Proyecto"
-                  value={projectId}
-                  onChange={(event) => setProjectId(event.target.value)}
-                  disabled={saving}
-                  sx={{ borderRadius: "14px" }}
-                >
-                  {projects.map((project) => (
-                    <MenuItem key={project.id} value={project.id}>
-                      <Stack direction="row" alignItems="center" spacing={1.2}>
-                        <Box
-                          sx={{
-                            width: 12,
-                            height: 12,
-                            mt: "-1px",
-                            borderRadius: 999,
-                            bgcolor: project.color || "primary.main",
-                            boxShadow: `0 0 0 4px ${alpha(
-                              project.color || theme.palette.primary.main,
-                              0.1
-                            )}`,
-                            flexShrink: 0,
-                          }}
-                        />
-
-                        <Typography component="span" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-                          {project.name}
-                        </Typography>
-                      </Stack>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <ProjectSelect
+                projects={projects}
+                value={form.projectId}
+                onChange={(projectId) => setForm({ ...form, projectId })}
+                disabled={saving}
+                showPreview={false}
+              />
             )}
-
-            {selectedProject ? (
-              <Stack
-                direction="row"
-                alignItems="center"
-                spacing={1.3}
-                sx={{
-                  borderRadius: "14px",
-                  border: "1px solid",
-                  borderColor:
-                    theme.palette.mode === "dark"
-                      ? alpha("#FFFFFF", 0.08)
-                      : alpha("#0F172A", 0.08),
-                  bgcolor:
-                    theme.palette.mode === "dark"
-                      ? alpha("#FFFFFF", 0.035)
-                      : alpha("#0F172A", 0.025),
-                  p: 1.5,
-                }}
-              >
-                <ProjectPreviewIcon project={selectedProject} />
-
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography sx={{ fontWeight: 950 }}>
-                    {selectedProject.name}
-                  </Typography>
-
-                  <Typography
-                    noWrap
-                    color="text.secondary"
-                    sx={{ mt: 0.2, fontSize: 13, fontWeight: 650 }}
-                  >
-                    Proyecto seleccionado
-                  </Typography>
-                </Box>
-              </Stack>
-            ) : null}
-
+            {duplicate && (
+              <Alert severity="info" sx={{ borderRadius: "14px", fontWeight: 600, py: 0.25 }}>
+                Este proyecto ya tiene un enlace guardado. Vas a tener los dos.
+              </Alert>
+            )}
             <TextField
               label="Enlace de Firebase Console"
-              value={firebaseUrl}
-              onChange={(event) => setFirebaseUrl(event.target.value)}
+              value={form.firebaseUrl}
+              onChange={(event) => setForm({ ...form, firebaseUrl: event.target.value })}
               fullWidth
               disabled={saving}
-              placeholder="https://console.firebase.google.com/..."
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <LinkRoundedIcon />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: "14px",
+              placeholder="https://console.firebase.google.com/project/..."
+              helperText={
+                getFirebaseProjectId(form.firebaseUrl)
+                  ? `Proyecto de Firebase detectado: ${getFirebaseProjectId(form.firebaseUrl)}`
+                  : "Copialo desde la barra del navegador con la consola abierta."
+              }
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment
+                      position="start"
+                      sx={{ color: FIREBASE_COLOR, "& svg": { fontSize: 20 } }}
+                    >
+                      <LinkRoundedIcon />
+                    </InputAdornment>
+                  ),
                 },
               }}
+              sx={roundedFieldSx("12px")}
             />
-
             <TextField
               label="Notas"
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
+              placeholder="Ej: plan Blaze, reglas en modo prueba, colecciones principales..."
+              value={form.notes}
+              onChange={(event) => setForm({ ...form, notes: event.target.value })}
               fullWidth
               multiline
-              minRows={3}
+              minRows={2}
+              maxRows={5}
               disabled={saving}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: "14px",
-                },
-              }}
+              sx={roundedFieldSx("12px")}
             />
-          </Stack>
-        </DialogContent>
+          </FormDialog>
 
-        <Divider />
+          <DeleteDialog
+            open={Boolean(toDelete)}
+            title="Eliminar enlace"
+            onClose={() => setToDelete(null)}
+            onConfirm={confirmDelete}
+            preview={
+              toDelete && (
+                <Stack direction="row" alignItems="center" spacing={1.1} sx={{ textAlign: "left" }}>
+                  <ProjectAvatar item={toDelete} size={34} />
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography noWrap sx={{ fontWeight: 750, fontSize: "0.88rem" }}>
+                      {toDelete.projectName || "Proyecto sin nombre"}
+                    </Typography>
+                    <Typography
+                      noWrap
+                      sx={{
+                        color: theme.palette.app.secondary,
+                        fontWeight: 600,
+                        fontSize: "0.76rem",
+                      }}
+                    >
+                      {getShortUrl(toDelete.firebaseUrl)}
+                    </Typography>
+                  </Box>
+                </Stack>
+              )
+            }
+          />
 
-        <DialogActions sx={{ px: { xs: 2.2, md: 3 }, py: 2.2 }}>
-          <Button
-            onClick={onClose}
-            disabled={saving}
-            sx={{
-              textTransform: "none",
-              fontWeight: 850,
-              borderRadius: "12px",
-            }}
-          >
-            Cancelar
-          </Button>
-
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={saving || projects.length === 0}
-            startIcon={editingDatabase ? <EditRoundedIcon /> : <AddRoundedIcon />}
-            sx={{
-              minHeight: 45,
-              px: 2.4,
-              borderRadius: "14px",
-              fontWeight: 950,
-              textTransform: "none",
-            }}
-          >
-            {saving
-              ? "Guardando..."
-              : editingDatabase
-              ? "Guardar cambios"
-              : "Guardar enlace"}
-          </Button>
-        </DialogActions>
-      </Box>
-    </Dialog>
-  );
-}
-
-function ProjectPreviewIcon({ project }) {
-  const theme = useTheme();
-
-  const projectColor = project.color || theme.palette.primary.main;
-
-  return (
-    <Box
-      sx={{
-        width: 48,
-        height: 48,
-        flexShrink: 0,
-        borderRadius: 2.2,
-        border: "1px solid",
-        borderColor: getProjectIconBorder(theme, projectColor),
-        bgcolor: getProjectIconBackground(theme, projectColor),
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        overflow: "hidden",
-      }}
+          <Toast toast={toast} onClose={closeToast} />
+        </>
+      }
     >
-      {project.logoUrl ? (
-        <Box
-          component="img"
-          src={project.logoUrl}
-          alt={project.name || "Proyecto"}
-          sx={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-          }}
+      <Section>
+        <PageHeader
+          icon={<StorageRoundedIcon />}
+          title="Base de datos"
+          description="Accesos directos a Firebase Console por proyecto, con notas rápidas."
+          actionLabel="Nuevo enlace"
+          onAction={() => openForm()}
         />
+      </Section>
+
+      <PageAlert message={pageError || loadError} onClose={() => setPageError("")} />
+
+      <Section delay={70}>
+        <StatsGrid
+          items={[
+            {
+              label: "Enlaces",
+              value: databases.length,
+              icon: <StorageRoundedIcon />,
+              color: theme.palette.primary.main,
+            },
+            {
+              label: "Proyectos",
+              value: projects.length,
+              icon: <FolderRoundedIcon />,
+              color: theme.palette.success.main,
+            },
+            {
+              label: "Con Firebase",
+              value: stats.withDatabase,
+              icon: <CloudQueueRoundedIcon />,
+              color: FIREBASE_COLOR,
+            },
+            {
+              label: "Sin enlace",
+              value: stats.withoutDatabase,
+              icon: <FolderOpenRoundedIcon />,
+              color: theme.palette.text.secondary,
+            },
+          ]}
+        />
+      </Section>
+
+      {databases.length === 0 ? (
+        <Section delay={140}>
+          <EmptyState
+            icon={<StorageRoundedIcon />}
+            title="Todavía no guardaste bases de datos"
+            text="Elegí un proyecto y pegá el enlace de su Firebase Console para entrar con un clic cuando lo necesites."
+            actionLabel="Nuevo enlace"
+            onAction={() => openForm()}
+          />
+        </Section>
       ) : (
-        <Typography
-          sx={{
-            color: projectColor,
-            fontSize: 21,
-            fontWeight: 950,
-          }}
-        >
-          {project.name?.charAt(0)?.toUpperCase() || "P"}
-        </Typography>
+        <>
+          <Section delay={120}>
+            <FilterBar
+              title="Consolas guardadas"
+              subtitle={`${filtered.length} de ${databases.length} visibles`}
+              onReset={hasFilters ? resetFilters : undefined}
+            >
+              <SearchField
+                value={search}
+                onChange={setSearch}
+                placeholder="Buscar proyecto, URL o nota..."
+                width={280}
+              />
+              <FilterSelect
+                label="Proyecto"
+                value={filterProject}
+                onChange={setFilterProject}
+                minWidth={230}
+              >
+                {projectFilterOptions(projects, { withoutProject: false })}
+              </FilterSelect>
+            </FilterBar>
+          </Section>
+
+          <Section delay={180}>
+            {filtered.length === 0 ? (
+              <EmptyState
+                icon={<SearchOffRoundedIcon />}
+                title="Sin resultados"
+                text="Ningún enlace coincide con la búsqueda o el proyecto elegido."
+                actionLabel="Limpiar filtros"
+                actionIcon={<FilterAltOffRoundedIcon />}
+                onAction={resetFilters}
+              />
+            ) : (
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: {
+                    xs: "1fr",
+                    md: "repeat(2, minmax(0, 1fr))",
+                    xl: "repeat(3, minmax(0, 1fr))",
+                  },
+                  gap: { xs: 1.5, md: 1.75 },
+                  alignItems: "start",
+                }}
+              >
+                {filtered.map((item, index) => (
+                  <DatabaseCard
+                    key={item.id}
+                    item={item}
+                    delay={index * 45}
+                    onOpen={() => openFirebaseLink(item)}
+                    onCopy={() => copyLink(item)}
+                    onEdit={() => openForm(item)}
+                    onDelete={() => setToDelete(item)}
+                  />
+                ))}
+              </Box>
+            )}
+          </Section>
+        </>
       )}
-    </Box>
+    </PageShell>
   );
 }
 
-function DeleteDialog({ open, databaseToDelete, onClose, onConfirm }) {
+function DatabaseCard({ item, delay, onOpen, onCopy, onEdit, onDelete }) {
   const theme = useTheme();
+  const projectColor = item.projectColor || theme.palette.primary.main;
+  const firebaseId = getFirebaseProjectId(item.firebaseUrl);
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      fullWidth
-      maxWidth="xs"
-      PaperProps={{
-        sx: {
-          borderRadius: "20px",
-          bgcolor: theme.palette.background.paper,
-          backgroundImage: "none",
-          border: "1px solid",
-          borderColor:
-            theme.palette.mode === "dark"
-              ? alpha("#FFFFFF", 0.1)
-              : alpha("#0F172A", 0.08),
-          boxShadow:
-            theme.palette.mode === "dark"
-              ? "0 28px 90px rgba(0,0,0,0.55)"
-              : "0 28px 80px rgba(15,23,42,0.18)",
+    <Card
+      elevation={0}
+      sx={{
+        ...getCardStyles(theme, "18px"),
+        ...getSoftFadeSx(delay),
+        p: { xs: 1.6, md: 1.75 },
+        transition: "transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease",
+        "&:hover": {
+          transform: "translateY(-2px)",
+          borderColor: alpha(projectColor, 0.4),
+          boxShadow: `0 14px 34px ${alpha(projectColor, theme.palette.mode === "dark" ? 0.16 : 0.1)}`,
         },
       }}
     >
-      <DialogContent sx={{ px: 3, pt: 3 }}>
-        <Stack spacing={2}>
-          <Stack direction="row" alignItems="center" spacing={1.4}>
-            <Avatar
-              variant="rounded"
-              sx={{
-                width: 52,
-                height: 52,
-                borderRadius: "14px",
-                bgcolor: alpha(theme.palette.error.main, 0.12),
-                color: theme.palette.error.main,
-                border: "1px solid",
-                borderColor: alpha(theme.palette.error.main, 0.2),
-                flexShrink: 0,
-              }}
-            >
-              <DeleteRoundedIcon sx={{ fontSize: 28 }} />
-            </Avatar>
-
-            <Box sx={{ minWidth: 0 }}>
-              <Typography
-                sx={{
-                  fontSize: "1.35rem",
-                  fontWeight: 950,
-                  lineHeight: 1.15,
-                }}
-              >
-                Eliminar enlace
-              </Typography>
-
-              <Typography
-                color="text.secondary"
-                sx={{ mt: 0.45, lineHeight: 1.5, fontWeight: 600, fontSize: "0.9rem" }}
-              >
-                Esta acción no se puede deshacer.
-              </Typography>
-            </Box>
-          </Stack>
-
-          {databaseToDelete ? (
-            <Box
-              sx={{
-                width: "100%",
-                borderRadius: "14px",
-                border: "1px solid",
-                borderColor:
-                  theme.palette.mode === "dark"
-                    ? alpha("#FFFFFF", 0.08)
-                    : alpha("#0F172A", 0.08),
-                bgcolor:
-                  theme.palette.mode === "dark"
-                    ? alpha("#FFFFFF", 0.04)
-                    : alpha("#0F172A", 0.035),
-                px: 2,
-                py: 1.4,
-              }}
-            >
-              <Typography sx={{ fontWeight: 950, textAlign: "center" }}>
-                {databaseToDelete.projectName || "Proyecto sin nombre"}
-              </Typography>
-
-              <Typography
-                color="text.secondary"
-                sx={{ mt: 0.35, fontWeight: 700, textAlign: "center", fontSize: 13 }}
-              >
-                Firebase Console
-              </Typography>
-            </Box>
-          ) : null}
+      <Stack direction="row" alignItems="center" spacing={1.3}>
+        <ProjectAvatar item={item} size={40} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography
+            noWrap
+            sx={{
+              color: theme.palette.app.text,
+              fontSize: "0.98rem",
+              fontWeight: 800,
+              letterSpacing: "-0.2px",
+            }}
+          >
+            {item.projectName || "Proyecto sin nombre"}
+          </Typography>
+          <Typography
+            noWrap
+            sx={{ color: theme.palette.app.secondary, fontSize: "0.75rem", fontWeight: 600 }}
+          >
+            Firebase Console
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={0.5}>
+          <IconAction title="Editar" size={30} color={theme.palette.info.main} onClick={onEdit}>
+            <EditRoundedIcon sx={{ fontSize: 16 }} />
+          </IconAction>
+          <IconAction
+            title="Eliminar"
+            size={30}
+            color={theme.palette.error.main}
+            onClick={onDelete}
+          >
+            <DeleteRoundedIcon sx={{ fontSize: 16 }} />
+          </IconAction>
         </Stack>
-      </DialogContent>
+      </Stack>
 
-      <DialogActions sx={{ px: 3, pb: 3, pt: 2 }}>
-        <Button
-          fullWidth
-          variant="outlined"
-          onClick={onClose}
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={1.1}
+        sx={{
+          mt: 1.5,
+          pl: 0.9,
+          pr: 0.6,
+          py: 0.7,
+          borderRadius: "12px",
+          bgcolor: getSoftBackground(theme),
+          border: `1px solid ${theme.palette.app.borderSoft}`,
+        }}
+      >
+        <Box
           sx={{
-            minHeight: 42,
-            borderRadius: "14px",
-            fontWeight: 900,
-            textTransform: "none",
+            width: 28,
+            height: 28,
+            flexShrink: 0,
+            borderRadius: "9px",
+            display: "grid",
+            placeItems: "center",
+            color: FIREBASE_COLOR,
+            bgcolor: softTint(theme, FIREBASE_COLOR, 0.1, 0.18),
+            "& svg": { fontSize: 16 },
           }}
         >
-          Cancelar
-        </Button>
-
-        <Button
-          fullWidth
-          variant="contained"
-          color="error"
-          startIcon={<DeleteRoundedIcon />}
-          onClick={onConfirm}
-          sx={{
-            minHeight: 42,
-            borderRadius: "14px",
-            fontWeight: 900,
-            textTransform: "none",
-            boxShadow: "none",
-          }}
+          <StorageRoundedIcon />
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography
+            noWrap
+            sx={{ color: theme.palette.app.text, fontSize: "0.82rem", fontWeight: 650 }}
+          >
+            {firebaseId || getShortUrl(item.firebaseUrl)}
+          </Typography>
+          {firebaseId && (
+            <Typography
+              noWrap
+              sx={{ color: theme.palette.app.secondary, fontSize: "0.72rem", fontWeight: 550 }}
+            >
+              {getShortUrl(item.firebaseUrl)}
+            </Typography>
+          )}
+        </Box>
+        <IconAction
+          title="Copiar enlace"
+          size={28}
+          color={theme.palette.app.secondary}
+          onClick={onCopy}
         >
-          Eliminar
-        </Button>
-      </DialogActions>
-    </Dialog>
+          <ContentCopyRoundedIcon sx={{ fontSize: 15 }} />
+        </IconAction>
+      </Stack>
+
+      {item.notes && (
+        <Stack direction="row" alignItems="flex-start" spacing={0.9} sx={{ mt: 1.1, px: 0.4 }}>
+          <NoteAltRoundedIcon
+            sx={{ mt: 0.15, fontSize: 16, color: theme.palette.app.secondary, flexShrink: 0 }}
+          />
+          <Typography
+            sx={{
+              color: theme.palette.app.secondary,
+              fontSize: "0.8rem",
+              fontWeight: 550,
+              lineHeight: 1.5,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {item.notes}
+          </Typography>
+        </Stack>
+      )}
+
+      <SoftButton
+        fullWidth
+        startIcon={<OpenInNewRoundedIcon />}
+        onClick={onOpen}
+        sx={{ mt: 1.4, minHeight: 36, borderRadius: "11px", fontWeight: 800, fontSize: "0.82rem" }}
+      >
+        Abrir Firebase
+      </SoftButton>
+    </Card>
   );
 }

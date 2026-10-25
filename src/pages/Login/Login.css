@@ -1,4 +1,4 @@
-/*Login*/
+/* Login: */
 * {
   box-sizing: border-box;
 }
@@ -14,7 +14,171 @@ body,
 
 body {
   overscroll-behavior: none;
-  background: #020617;
+  background: #030712;
   overflow-x: hidden;
-  overflow-y: auto;
+}
+
+/* ---------- Fondo ---------- */
+.login-bg {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: radial-gradient(1200px 600px at 50% -10%, rgba(59, 130, 246, 0.16), transparent 60%),
+    linear-gradient(180deg, #030712 0%, #050b1a 55%, #030712 100%);
+}
+
+.login-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 100%);
+}
+
+.login-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.login-orb {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(90px);
+  opacity: 0.55;
+  will-change: transform;
+}
+
+.login-orb--blue {
+  width: 520px;
+  height: 520px;
+  top: -140px;
+  left: -120px;
+  background: #2563eb;
+  animation: login-drift-a 22s ease-in-out infinite alternate;
+}
+
+.login-orb--cyan {
+  width: 420px;
+  height: 420px;
+  bottom: -160px;
+  right: -80px;
+  background: #0891b2;
+  opacity: 0.4;
+  animation: login-drift-b 26s ease-in-out infinite alternate;
+}
+
+.login-orb--violet {
+  width: 360px;
+  height: 360px;
+  top: 38%;
+  left: 46%;
+  background: #4f46e5;
+  opacity: 0.28;
+  animation: login-drift-c 30s ease-in-out infinite alternate;
+}
+
+@keyframes login-drift-a {
+  to {
+    transform: translate(120px, 80px) scale(1.12);
+  }
+}
+
+@keyframes login-drift-b {
+  to {
+    transform: translate(-140px, -60px) scale(1.18);
+  }
+}
+
+@keyframes login-drift-c {
+  to {
+    transform: translate(-120px, 70px) scale(0.9);
+  }
+}
+
+/* ---------- Entradas ---------- */
+.login-rise {
+  opacity: 0;
+  animation: login-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes login-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.login-float {
+  animation: login-float 7s ease-in-out infinite;
+}
+
+@keyframes login-float {
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.login-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.login-shine::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: skewX(-20deg);
+  transition: left 650ms ease;
+}
+
+.login-shine:hover::after {
+  left: 130%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-orb,
+  .login-float {
+    animation: none;
+  }
+
+  .login-rise {
+    animation-duration: 1ms;
+  }
+}
+
+.login-glow {
+  animation: login-glow 6s ease-in-out infinite;
+}
+
+@keyframes login-glow {
+  0%,
+  100% {
+    opacity: 0.75;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-glow {
+    animation: none;
+  }
 }

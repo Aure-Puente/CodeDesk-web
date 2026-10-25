@@ -1,1401 +1,921 @@
-//Importaciones:
-import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
-import Box from "@mui/material/Box";
-import Card from "@mui/material/Card";
-import Chip from "@mui/material/Chip";
-import Stack from "@mui/material/Stack";
-import Alert from "@mui/material/Alert";
-import Avatar from "@mui/material/Avatar";
-import Typography from "@mui/material/Typography";
-import LinearProgress from "@mui/material/LinearProgress";
-import Divider from "@mui/material/Divider";
-import { alpha, keyframes, useTheme } from "@mui/material/styles";
+//Informes:
+import { useMemo, useState } from "react";
+import { Box, Card, LinearProgress, Typography } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 import { BarChart } from "@mui/x-charts/BarChart";
 import { PieChart } from "@mui/x-charts/PieChart";
-import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
-import DateRangeRoundedIcon from "@mui/icons-material/DateRangeRounded";
-import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
-import DonutLargeRoundedIcon from "@mui/icons-material/DonutLargeRounded";
+import { Gauge, gaugeClasses } from "@mui/x-charts/Gauge";
+import AccountBalanceWalletRoundedIcon from "@mui/icons-material/AccountBalanceWalletRounded";
+import AssignmentRoundedIcon from "@mui/icons-material/AssignmentRounded";
 import BarChartRoundedIcon from "@mui/icons-material/BarChartRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
-import PendingActionsRoundedIcon from "@mui/icons-material/PendingActionsRounded";
-import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
-import PauseCircleRoundedIcon from "@mui/icons-material/PauseCircleRounded";
-import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
-import AccountBalanceWalletRoundedIcon from "@mui/icons-material/AccountBalanceWalletRounded";
-import AttachMoneyRoundedIcon from "@mui/icons-material/AttachMoneyRounded";
+import DonutLargeRoundedIcon from "@mui/icons-material/DonutLargeRounded";
+import EventRoundedIcon from "@mui/icons-material/EventRounded";
+import FlagRoundedIcon from "@mui/icons-material/FlagRounded";
+import InsightsRoundedIcon from "@mui/icons-material/InsightsRounded";
 import PriceCheckRoundedIcon from "@mui/icons-material/PriceCheckRounded";
 import RequestQuoteRoundedIcon from "@mui/icons-material/RequestQuoteRounded";
-import FolderOpenRoundedIcon from "@mui/icons-material/FolderOpenRounded";
-import InsightsRoundedIcon from "@mui/icons-material/InsightsRounded";
-import ReceiptLongRoundedIcon from "@mui/icons-material/ReceiptLongRounded";
-import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
-import WorkspacesRoundedIcon from "@mui/icons-material/WorkspacesRounded";
-import SavingsRoundedIcon from "@mui/icons-material/SavingsRounded";
-import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
-import { db } from "../../firebase/firebase";
-import { useAuth } from "../../context/AuthContext";
+import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
+import SpeedRoundedIcon from "@mui/icons-material/SpeedRounded";
+import ViewListRoundedIcon from "@mui/icons-material/ViewListRounded";
+import useUserCollection from "../../shared/hooks/useUserCollection";
+import { formatMoney, withPaymentInfo } from "../../shared/utils";
+import {
+  EmptyState,
+  PageAlert,
+  PageHeader,
+  PageShell,
+  ProjectAvatar,
+  Section,
+  Stack,
+  StatsGrid,
+  getCardStyles,
+  getSoftBackground,
+  softTint,
+} from "../../shared/ui";
+import {
+  PRIORITIES,
+  PRIORITY,
+  getChecklist,
+  getDueColor,
+  getDueInfo,
+  getStatusColor,
+  isOverdue,
+} from "../Tareas/taskUtils";
 
-//JSX:
-// Animaciones:
-const fadeInUp = keyframes`
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-`;
-
-const softFadeIn = keyframes`
-  from {
-    opacity: 0;
-    transform: scale(0.985);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-`;
-
-const getFadeInSx = (delay = 0) => ({
-  opacity: 0,
-  animation: `${fadeInUp} 420ms ease forwards`,
-  animationDelay: `${delay}ms`,
-});
-
-const getSoftFadeSx = (delay = 0) => ({
-  opacity: 0,
-  animation: `${softFadeIn} 380ms ease forwards`,
-  animationDelay: `${delay}ms`,
-});
-
-const CHART_DELAY_MS = 620;
-
-const getSlowChartSx = () => ({
-  "& .MuiPieChart-arc": {
-    transitionDuration: "1300ms !important",
-    animationDuration: "1300ms !important",
-    transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1) !important",
-  },
-  "& .MuiPieChart-animate .MuiPieChart-arc": {
-    animationDuration: "1300ms !important",
-    animationTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1) !important",
-  },
-  "& .MuiBarElement-root": {
-    transitionDuration: "1300ms !important",
-    animationDuration: "1300ms !important",
-    transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1) !important",
-  },
-});
-
-const RANGE_OPTIONS = [
-  { label: "Todo", value: "all", icon: <CalendarMonthRoundedIcon /> },
-  { label: "Este mes", value: "month", icon: <DateRangeRoundedIcon /> },
-  { label: "Este año", value: "year", icon: <DateRangeRoundedIcon /> },
+const RANGES = [
+  { value: "all", label: "Todo", text: "Últimos 6 meses" },
+  { value: "year", label: "Este año", text: "Este año" },
+  { value: "month", label: "Este mes", text: "Este mes" },
 ];
 
-function getPaidAmount(payment) {
-  return (payment.installments || []).reduce(
-    (acc, item) => acc + Number(item.amount || 0),
-    0
-  );
-}
+const TASK_STATUSES = [
+  { key: "en progreso", label: "En progreso" },
+  { key: "pendiente", label: "Pendientes" },
+  { key: "pausada", label: "Pausadas" },
+  { key: "completada", label: "Completadas" },
+];
 
-function formatMoney(value, currency = "ARS") {
-  const number = Number(value || 0);
+const PROJECT_STATUSES = [
+  { key: "activo", label: "Activos", color: (t) => t.palette.info.main },
+  { key: "pausado", label: "Pausados", color: (t) => t.palette.warning.main },
+  { key: "finalizado", label: "Finalizados", color: (t) => t.palette.success.main },
+];
 
-  if (currency === "USD") {
-    return `US$${number.toLocaleString("es-AR", {
-      maximumFractionDigits: 0,
-    })}`;
-  }
+const percent = (part, total) => (total > 0 ? Math.round(Math.min(part / total, 1) * 100) : 0);
+const toDate = (ts) => (ts?.seconds ? new Date(ts.seconds * 1000) : null);
+const capitalize = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+const monthLabel = (date) =>
+  capitalize(date.toLocaleDateString("es-AR", { month: "short" }).replace(".", ""));
 
-  return `$${number.toLocaleString("es-AR", {
-    maximumFractionDigits: 0,
-  })}`;
-}
-
-function filterByRange(items, range) {
-  if (range === "all") return items;
-
+const inRange = (date, range) => {
+  if (range === "all" || !date) return true;
   const now = new Date();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    (range === "year" || date.getMonth() === now.getMonth())
+  );
+};
 
-  return items.filter((item) => {
-    const seconds = item.createdAt?.seconds;
-
-    if (!seconds) return true;
-
-    const date = new Date(seconds * 1000);
-
-    if (range === "month") {
-      return (
-        date.getMonth() === now.getMonth() &&
-        date.getFullYear() === now.getFullYear()
-      );
-    }
-
-    if (range === "year") {
-      return date.getFullYear() === now.getFullYear();
-    }
-
-    return true;
+const getBuckets = (range) => {
+  const now = new Date();
+  if (range === "month") {
+    const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    return Array.from({ length: Math.ceil(days / 7) }, (_, i) => ({
+      label: `Sem ${i + 1}`,
+      match: (d) =>
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        Math.floor((d.getDate() - 1) / 7) === i,
+    }));
+  }
+  const count = range === "year" ? now.getMonth() + 1 : 6;
+  return Array.from({ length: count }, (_, i) => {
+    const ref =
+      range === "year"
+        ? new Date(now.getFullYear(), i, 1)
+        : new Date(now.getFullYear(), now.getMonth() - (count - 1 - i), 1);
+    return {
+      label: monthLabel(ref),
+      match: (d) => d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth(),
+    };
   });
-}
-
-function getRangeText(range) {
-  if (range === "month") return "Este mes";
-  if (range === "year") return "Este año";
-  return "Todo el historial";
-}
-
-function getCardStyles(theme) {
-  return {
-    borderRadius: "24px",
-    border: `1px solid ${theme.palette.app.borderSoft}`,
-    backgroundColor: theme.palette.app.surface,
-    backgroundImage: "none",
-    boxShadow:
-      theme.palette.mode === "dark"
-        ? "0 18px 48px rgba(0, 0, 0, 0.16)"
-        : "0 16px 42px rgba(15, 23, 42, 0.045)",
-  };
-}
-
-function getSoftBackground(theme) {
-  return theme.palette.mode === "dark"
-    ? alpha("#FFFFFF", 0.035)
-    : alpha("#0F172A", 0.025);
-}
+};
 
 export default function Informes() {
   const theme = useTheme();
-  const { user } = useAuth();
-
-  const [tasks, setTasks] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [payments, setPayments] = useState([]);
-  const [notes, setNotes] = useState([]);
-
-  const [loadingTasks, setLoadingTasks] = useState(true);
-  const [loadingProjects, setLoadingProjects] = useState(true);
-  const [loadingPayments, setLoadingPayments] = useState(true);
-  const [loadingNotes, setLoadingNotes] = useState(true);
+  const [allTasks, loadingTasks, errorTasks] = useUserCollection("tasks");
+  const [allProjects, loadingProjects] = useUserCollection("projects");
+  const [allPayments, loadingPayments] = useUserCollection("payments");
+  const loading = loadingTasks || loadingProjects || loadingPayments;
 
   const [range, setRange] = useState("all");
-  const [pageError, setPageError] = useState("");
-  const [chartsReady, setChartsReady] = useState(false);
+  const [currencyPick, setCurrencyPick] = useState(null);
 
-  const loading = loadingTasks || loadingProjects || loadingPayments || loadingNotes;
+  const data = useMemo(() => {
+    const tasks = allTasks.filter((t) => inRange(toDate(t.createdAt), range));
+    const projects = allProjects.filter((p) => inRange(toDate(p.createdAt), range));
+    const payments = allPayments.map(withPaymentInfo);
 
-  useEffect(() => {
-    if (!user?.uid) {
-      setTasks([]);
-      setProjects([]);
-      setPayments([]);
-      setNotes([]);
-      setLoadingTasks(false);
-      setLoadingProjects(false);
-      setLoadingPayments(false);
-      setLoadingNotes(false);
-      return;
-    }
-
-    const unsubTasks = onSnapshot(
-      query(collection(db, "tasks"), where("userId", "==", user.uid)),
-      (snapshot) => {
-        setTasks(
-          snapshot.docs.map((document) => ({
-            id: document.id,
-            ...document.data(),
-          }))
-        );
-        setLoadingTasks(false);
-      },
-      (error) => {
-        console.log(error);
-        setLoadingTasks(false);
-        setPageError("No se pudieron cargar las tareas.");
-      }
+    const installments = payments.flatMap((p) =>
+      (p.installments || []).map((i) => ({ ...i, currency: p.currency, date: new Date(i.date) })),
     );
+    const collected = { ARS: 0, USD: 0 };
+    installments
+      .filter((i) => !Number.isNaN(i.date.getTime()) && inRange(i.date, range))
+      .forEach((i) => (collected[i.currency] += Number(i.amount || 0)));
 
-    const unsubProjects = onSnapshot(
-      query(collection(db, "projects"), where("userId", "==", user.uid)),
-      (snapshot) => {
-        setProjects(
-          snapshot.docs.map((document) => ({
-            id: document.id,
-            ...document.data(),
-          }))
-        );
-        setLoadingProjects(false);
-      },
-      (error) => {
-        console.log(error);
-        setLoadingProjects(false);
-        setPageError("No se pudieron cargar los proyectos.");
-      }
-    );
+    const buckets = getBuckets(range);
+    const series = (currency) =>
+      buckets.map((b) =>
+        installments
+          .filter(
+            (i) => i.currency === currency && !Number.isNaN(i.date.getTime()) && b.match(i.date),
+          )
+          .reduce((acc, i) => acc + Number(i.amount || 0), 0),
+      );
 
-    const unsubPayments = onSnapshot(
-      query(collection(db, "payments"), where("userId", "==", user.uid)),
-      (snapshot) => {
-        setPayments(
-          snapshot.docs.map((document) => ({
-            id: document.id,
-            ...document.data(),
-          }))
-        );
-        setLoadingPayments(false);
-      },
-      (error) => {
-        console.log(error);
-        setLoadingPayments(false);
-        setPageError("No se pudieron cargar los pagos.");
-      }
-    );
-
-    const unsubNotes = onSnapshot(
-      query(collection(db, "notes"), where("userId", "==", user.uid)),
-      (snapshot) => {
-        setNotes(
-          snapshot.docs.map((document) => ({
-            id: document.id,
-            ...document.data(),
-          }))
-        );
-        setLoadingNotes(false);
-      },
-      (error) => {
-        console.log(error);
-        setLoadingNotes(false);
-        setPageError("No se pudieron cargar las notas.");
-      }
-    );
-
-    return () => {
-      unsubTasks();
-      unsubProjects();
-      unsubPayments();
-      unsubNotes();
-    };
-  }, [user]);
-
-  const filteredData = useMemo(() => {
-    return {
-      tasks: filterByRange(tasks, range),
-      projects: filterByRange(projects, range),
-      payments: filterByRange(payments, range),
-      notes: filterByRange(notes, range),
-    };
-  }, [tasks, projects, payments, notes, range]);
-
-  const stats = useMemo(() => {
-    const completedTasks = filteredData.tasks.filter(
-      (task) => task.status === "completada"
-    ).length;
-
-    const pendingTasks = filteredData.tasks.filter(
-      (task) => task.status === "pendiente"
-    ).length;
-
-    const inProgressTasks = filteredData.tasks.filter(
-      (task) => task.status === "en progreso"
-    ).length;
-
-    const pausedTasks = filteredData.tasks.filter(
-      (task) => task.status === "pausada"
-    ).length;
-
-    const activeProjects = filteredData.projects.filter(
-      (project) => project.status === "activo"
-    ).length;
-
-    const pausedProjects = filteredData.projects.filter(
-      (project) => project.status === "pausado"
-    ).length;
-
-    const finishedProjects = filteredData.projects.filter(
-      (project) => project.status === "finalizado"
-    ).length;
-
-    const money = {
-      ARS: { agreed: 0, paid: 0, pending: 0 },
-      USD: { agreed: 0, paid: 0, pending: 0 },
-    };
-
-    let unpaidPayments = 0;
-    let partialPayments = 0;
-    let paidPayments = 0;
-
-    filteredData.payments.forEach((payment) => {
-      const currency = payment.currency || "ARS";
-      const agreed = Number(payment.totalAmount || 0);
-      const paid = getPaidAmount(payment);
-      const pending = Math.max(agreed - paid, 0);
-
-      if (!money[currency]) {
-        money[currency] = { agreed: 0, paid: 0, pending: 0 };
-      }
-
-      money[currency].agreed += agreed;
-      money[currency].paid += paid;
-      money[currency].pending += pending;
-
-      if (paid <= 0 && agreed > 0) unpaidPayments += 1;
-      if (paid > 0 && paid < agreed) partialPayments += 1;
-      if (agreed > 0 && paid >= agreed) paidPayments += 1;
+    const byProject = new Map();
+    tasks.forEach((t) => {
+      const key = t.projectId || "personal";
+      if (!byProject.has(key))
+        byProject.set(key, { name: t.projectName || "Personal", active: 0, done: 0 });
+      byProject.get(key)[t.status === "completada" ? "done" : "active"] += 1;
     });
 
-    const activeTasks = pendingTasks + inProgressTasks;
+    const open = tasks.filter((t) => t.status !== "completada");
+    const checklist = tasks.flatMap(getChecklist);
 
     return {
-      totalTasks: filteredData.tasks.length,
-      completedTasks,
-      pendingTasks,
-      inProgressTasks,
-      pausedTasks,
-      activeTasks,
-
-      totalProjects: filteredData.projects.length,
-      activeProjects,
-      pausedProjects,
-      finishedProjects,
-
-      totalNotes: filteredData.notes.length,
-      totalPayments: filteredData.payments.length,
-      unpaidPayments,
-      partialPayments,
-      paidPayments,
-
-      money,
+      tasks,
+      open,
+      overdue: tasks.filter(isOverdue).length,
+      completed: tasks.length - open.length,
+      statusCounts: Object.fromEntries(
+        TASK_STATUSES.map(({ key }) => [key, tasks.filter((t) => t.status === key).length]),
+      ),
+      priorityCounts: Object.fromEntries(
+        [...PRIORITIES, "none"].map((key) => [
+          key,
+          open.filter((t) => (t.priority || "none") === key).length,
+        ]),
+      ),
+      checklistTotal: checklist.length,
+      checklistDone: checklist.filter((i) => i.done).length,
+      projects,
+      projectCounts: Object.fromEntries(
+        PROJECT_STATUSES.map(({ key }) => [key, projects.filter((p) => p.status === key).length]),
+      ),
+      byProject: [...byProject.values()]
+        .sort((a, b) => b.active + b.done - (a.active + a.done))
+        .slice(0, 6),
+      collected,
+      buckets: buckets.map((b) => b.label),
+      money: { ARS: series("ARS"), USD: series("USD") },
+      currencies: ["ARS", "USD"].filter(
+        (c) => payments.some((p) => p.currency === c) || collected[c] > 0,
+      ),
+      upcoming: allTasks
+        .filter((t) => t.status !== "completada" && t.dueDate)
+        .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+        .slice(0, 5),
+      pending: payments
+        .filter((p) => p.pendingAmount > 0)
+        .sort((a, b) => a.progress - b.progress)
+        .slice(0, 5),
     };
-  }, [filteredData]);
+  }, [allTasks, allProjects, allPayments, range]);
 
-  const taskProgressPercent = useMemo(() => {
-    if (stats.totalTasks === 0) return 0;
-    return Math.round((stats.completedTasks / stats.totalTasks) * 100);
-  }, [stats]);
-
-  const projectProgressPercent = useMemo(() => {
-    if (stats.totalProjects === 0) return 0;
-    return Math.round((stats.finishedProjects / stats.totalProjects) * 100);
-  }, [stats]);
-
-  const moneyProgress = useMemo(() => {
-    const totalAgreed = stats.money.ARS.agreed + stats.money.USD.agreed;
-    const totalPaid = stats.money.ARS.paid + stats.money.USD.paid;
-
-    if (totalAgreed <= 0) return 0;
-
-    return Math.round(Math.min(totalPaid / totalAgreed, 1) * 100);
-  }, [stats]);
-
-  const projectPieData = useMemo(() => {
-    return [
-      {
-        id: "activo",
-        label: "Activos",
-        value: stats.activeProjects,
-        color: theme.palette.info.main,
-      },
-      {
-        id: "pausado",
-        label: "Pausados",
-        value: stats.pausedProjects,
-        color: theme.palette.warning.main,
-      },
-      {
-        id: "finalizado",
-        label: "Finalizados",
-        value: stats.finishedProjects,
-        color: theme.palette.success.main,
-      },
-    ].filter((item) => item.value > 0);
-  }, [stats, theme]);
-
-  const taskBarData = useMemo(() => {
-    return [
-      { label: "Pend.", value: stats.pendingTasks },
-      { label: "Progr.", value: stats.inProgressTasks },
-      { label: "Hechas", value: stats.completedTasks },
-      { label: "Paus.", value: stats.pausedTasks },
-    ];
-  }, [stats]);
-
-  useEffect(() => {
-    if (loading) {
-      setChartsReady(false);
-      return undefined;
-    }
-
-    setChartsReady(false);
-
-    const timer = window.setTimeout(() => {
-      setChartsReady(true);
-    }, CHART_DELAY_MS);
-
-    return () => window.clearTimeout(timer);
-  }, [
-    loading,
-    range,
-    stats.totalTasks,
-    stats.totalProjects,
-    stats.activeProjects,
-    stats.pausedProjects,
-    stats.finishedProjects,
-    stats.pendingTasks,
-    stats.inProgressTasks,
-    stats.completedTasks,
-    stats.pausedTasks,
-  ]);
+  const currency = data.currencies.includes(currencyPick) ? currencyPick : data.currencies[0];
+  const rangeText = RANGES.find((r) => r.value === range).text;
+  const isEmpty = !allTasks.length && !allProjects.length && !allPayments.length;
+  const taskPercent = percent(data.completed, data.tasks.length);
+  const checklistPercent = percent(data.checklistDone, data.checklistTotal);
 
   return (
-    <Box
-      sx={{
-        position: "relative",
-        width: "100%",
-        maxWidth: 1280,
-        mx: "auto",
-        px: { xs: 0, sm: 1, lg: 2 },
-        pb: { xs: 4, md: 6 },
-      }}
-    >
-      <Stack spacing={{ xs: 2.2, md: 2.6 }}>
-        <Box sx={getFadeInSx(0)}>
-          <PageHeader
-            range={range}
-            taskProgressPercent={taskProgressPercent}
-            projectProgressPercent={projectProgressPercent}
+    <PageShell loading={loading}>
+      <Section>
+        <PageHeader
+          icon={<InsightsRoundedIcon />}
+          title="Informes"
+          description="Cómo vienen tus cobros, tareas y proyectos, en un vistazo."
+          actions={<RangeToggle value={range} onChange={setRange} />}
+        />
+      </Section>
+
+      <PageAlert message={errorTasks} />
+
+      {isEmpty ? (
+        <Section delay={70}>
+          <EmptyState
+            icon={<InsightsRoundedIcon />}
+            title="Todavía no hay datos para analizar"
+            text="Cuando cargues proyectos, tareas o cobros, acá vas a ver gráficos con tu avance."
           />
-        </Box>
-
-        {pageError ? (
-          <Alert
-            severity="error"
-            sx={{
-              ...getFadeInSx(40),
-              borderRadius: "18px",
-              border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`,
-              fontWeight: 700,
-            }}
-          >
-            {pageError}
-          </Alert>
-        ) : null}
-
-        <Box sx={getFadeInSx(70)}>
-          <RangeSelector range={range} setRange={setRange} />
-        </Box>
-
-        {!loading ? (
-          <>
-            <Box sx={getFadeInSx(140)}>
-              <MetricGrid stats={stats} moneyProgress={moneyProgress} />
-            </Box>
-
-            <Box
-              sx={{
-                ...getFadeInSx(210),
-                display: "grid",
-                gridTemplateColumns: {
-                  xs: "1fr",
-                  lg: "0.95fr 1.05fr",
+        </Section>
+      ) : (
+        <>
+          <Section delay={70}>
+            <StatsGrid
+              items={[
+                {
+                  label: "Tareas abiertas",
+                  value: data.open.length,
+                  helper: data.overdue ? `${data.overdue} vencidas` : "Ninguna vencida",
+                  icon: <AssignmentRoundedIcon />,
+                  color: theme.palette.info.main,
                 },
-                gap: { xs: 2, md: 2.4 },
-                alignItems: "stretch",
-              }}
-            >
-              <ProgressOverview
-                taskProgressPercent={taskProgressPercent}
-                projectProgressPercent={projectProgressPercent}
-                moneyProgress={moneyProgress}
-                stats={stats}
-              />
+                {
+                  label: "Completadas",
+                  value: data.completed,
+                  helper: `${taskPercent}% del total`,
+                  icon: <CheckCircleRoundedIcon />,
+                  color: theme.palette.success.main,
+                },
+                {
+                  label: `Cobrado · ${rangeText.toLowerCase()}`,
+                  value: formatMoney(data.collected[currency || "ARS"], currency || "ARS"),
+                  helper:
+                    data.currencies.length > 1
+                      ? `+ ${formatMoney(data.collected[currency === "USD" ? "ARS" : "USD"], currency === "USD" ? "ARS" : "USD")}`
+                      : undefined,
+                  icon: <PriceCheckRoundedIcon />,
+                  color: theme.palette.warning.main,
+                  small: true,
+                },
+                {
+                  label: "Proyectos activos",
+                  value: data.projectCounts.activo,
+                  helper: `${data.projectCounts.finalizado} finalizados`,
+                  icon: <RocketLaunchRoundedIcon />,
+                  color: theme.palette.primary.main,
+                },
+              ]}
+            />
+          </Section>
 
-              <ProjectChartCard
-                projectPieData={projectPieData}
-                stats={stats}
-                chartsReady={chartsReady}
-                chartKey={`projects-${range}-${stats.activeProjects}-${stats.pausedProjects}-${stats.finishedProjects}`}
-              />
-            </Box>
+          {/* Fila 1: cobros por período + tareas por estado */}
+          <Section delay={130}>
+            <Grid columns={{ xs: "1fr", lg: "minmax(0, 1.65fr) minmax(0, 1fr)" }}>
+              <ChartCard
+                title="Cobros recibidos"
+                subtitle={`${rangeText} · según la fecha de cada pago`}
+                icon={<BarChartRoundedIcon />}
+                color={theme.palette.success.main}
+                aside={
+                  data.currencies.length > 1 && (
+                    <Segmented
+                      value={currency}
+                      onChange={setCurrencyPick}
+                      options={data.currencies.map((c) => ({ value: c, label: c }))}
+                    />
+                  )
+                }
+              >
+                {!currency || data.money[currency].every((v) => v === 0) ? (
+                  <EmptyBox
+                    icon={<AccountBalanceWalletRoundedIcon />}
+                    text="No hay pagos recibidos en este período."
+                  />
+                ) : (
+                  <Box sx={{ height: { xs: 240, lg: "100%" }, minHeight: 240, mx: -1 }}>
+                    <BarChart
+                      key={`cobros-${range}-${currency}`}
+                      xAxis={[
+                        {
+                          scaleType: "band",
+                          data: data.buckets,
+                          categoryGapRatio: 0.45,
+                          tickLabelStyle: { fontSize: 11 },
+                        },
+                      ]}
+                      yAxis={[
+                        {
+                          width: 64,
+                          valueFormatter: (v) => compactMoney(v, currency),
+                          tickLabelStyle: { fontSize: 11 },
+                        },
+                      ]}
+                      series={[
+                        {
+                          data: data.money[currency],
+                          label: `Cobrado ${currency}`,
+                          color: theme.palette.success.main,
+                          valueFormatter: (v) => formatMoney(v, currency),
+                        },
+                      ]}
+                      borderRadius={6}
+                      grid={{ horizontal: true }}
+                      hideLegend
+                      margin={{ top: 10, right: 10, bottom: 0, left: 0 }}
+                    />
+                  </Box>
+                )}
+              </ChartCard>
 
-            <Box sx={getFadeInSx(280)}>
-              <TaskChartCard
-                taskBarData={taskBarData}
-                totalTasks={stats.totalTasks}
-                chartsReady={chartsReady}
-                chartKey={`tasks-${range}-${stats.pendingTasks}-${stats.inProgressTasks}-${stats.completedTasks}-${stats.pausedTasks}`}
-              />
-            </Box>
+              <ChartCard
+                title="Tareas por estado"
+                subtitle={rangeText}
+                icon={<DonutLargeRoundedIcon />}
+                color={theme.palette.info.main}
+              >
+                {data.tasks.length === 0 ? (
+                  <EmptyBox
+                    icon={<AssignmentRoundedIcon />}
+                    text="No hay tareas en este período."
+                  />
+                ) : (
+                  <Donut
+                    total={data.tasks.length}
+                    caption="tareas"
+                    items={TASK_STATUSES.map(({ key, label }) => ({
+                      id: key,
+                      label,
+                      value: data.statusCounts[key],
+                      color: getStatusColor(theme, key),
+                    }))}
+                  />
+                )}
+              </ChartCard>
+            </Grid>
+          </Section>
 
-            <Box sx={getFadeInSx(350)}>
-              <FinancialSummary stats={stats} />
-            </Box>
-          </>
-        ) : null}
-      </Stack>
-    </Box>
+          {/* Fila 2: tareas por proyecto + avance y prioridades */}
+          <Section delay={190}>
+            <Grid columns={{ xs: "1fr", lg: "minmax(0, 1.65fr) minmax(0, 1fr)" }}>
+              <ChartCard
+                title="Tareas por proyecto"
+                subtitle="Abiertas y completadas · los 6 con más tareas"
+                icon={<ViewListRoundedIcon />}
+                color={theme.palette.primary.main}
+              >
+                {data.byProject.length === 0 ? (
+                  <EmptyBox icon={<ViewListRoundedIcon />} text="No hay tareas en este período." />
+                ) : (
+                  <Box
+                    sx={{
+                      height: { xs: 64 + data.byProject.length * 34, lg: "100%" },
+                      minHeight: 64 + data.byProject.length * 34,
+                      mx: -1,
+                    }}
+                  >
+                    <BarChart
+                      key={`proyectos-${range}`}
+                      layout="horizontal"
+                      dataset={data.byProject}
+                      yAxis={[
+                        {
+                          scaleType: "band",
+                          dataKey: "name",
+                          width: 96,
+                          categoryGapRatio: 0.45,
+                          tickLabelStyle: { fontSize: 11 },
+                          valueFormatter: (name) =>
+                            name.length > 13 ? `${name.slice(0, 12)}…` : name,
+                        },
+                      ]}
+                      xAxis={[{ tickMinStep: 1, tickLabelStyle: { fontSize: 11 } }]}
+                      series={[
+                        {
+                          dataKey: "active",
+                          label: "Abiertas",
+                          stack: "total",
+                          color: theme.palette.info.main,
+                        },
+                        {
+                          dataKey: "done",
+                          label: "Completadas",
+                          stack: "total",
+                          color: theme.palette.success.main,
+                        },
+                      ]}
+                      borderRadius={5}
+                      grid={{ vertical: true }}
+                      slotProps={{
+                        legend: {
+                          position: { vertical: "top", horizontal: "end" },
+                          sx: { fontSize: 12, "& .MuiChartsLegend-mark": { borderRadius: "3px" } },
+                        },
+                      }}
+                      margin={{ top: 4, right: 12, bottom: 0, left: 0 }}
+                    />
+                  </Box>
+                )}
+              </ChartCard>
+
+              <ChartCard
+                title="Avance"
+                subtitle="Tareas completadas e ítems de checklist"
+                icon={<SpeedRoundedIcon />}
+                color={theme.palette.success.main}
+              >
+                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
+                  <GaugeBox
+                    value={taskPercent}
+                    label="Tareas"
+                    detail={`${data.completed} de ${data.tasks.length}`}
+                    color={theme.palette.success.main}
+                  />
+                  <GaugeBox
+                    value={checklistPercent}
+                    label="Checklist"
+                    detail={`${data.checklistDone} de ${data.checklistTotal}`}
+                    color={theme.palette.primary.main}
+                  />
+                </Box>
+
+                <Typography sx={{ ...sectionTitle(theme), mt: 2 }}>
+                  Prioridad de las abiertas
+                </Typography>
+                <Stack spacing={0.9}>
+                  {[...PRIORITIES, "none"].map((key) => (
+                    <BarRow
+                      key={key}
+                      icon={<FlagRoundedIcon />}
+                      label={key === "none" ? "Sin prioridad" : PRIORITY[key].label}
+                      value={data.priorityCounts[key]}
+                      total={data.open.length}
+                      color={
+                        key === "none" ? theme.palette.app.secondary : PRIORITY[key].color(theme)
+                      }
+                    />
+                  ))}
+                </Stack>
+              </ChartCard>
+            </Grid>
+          </Section>
+
+          {/* Fila 3: listas accionables + proyectos */}
+          <Section delay={250}>
+            <Grid columns={{ xs: "1fr", md: "1fr 1fr", lg: "repeat(3, minmax(0, 1fr))" }}>
+              <ChartCard
+                title="Próximos vencimientos"
+                subtitle="Tareas abiertas con fecha límite"
+                icon={<EventRoundedIcon />}
+                color={theme.palette.error.main}
+              >
+                {data.upcoming.length === 0 ? (
+                  <EmptyBox icon={<EventRoundedIcon />} text="No hay tareas con fecha límite." />
+                ) : (
+                  <Stack spacing={0.75}>
+                    {data.upcoming.map((task) => {
+                      const due = getDueInfo(task);
+                      return (
+                        <ListRow
+                          key={task.id}
+                          item={task.projectId ? task : null}
+                          title={task.title || "Tarea sin título"}
+                          subtitle={task.projectName || "Personal"}
+                          right={
+                            <Typography
+                              noWrap
+                              sx={{
+                                fontSize: "0.74rem",
+                                fontWeight: 800,
+                                color: getDueColor(theme, due?.tone),
+                              }}
+                            >
+                              {due?.label}
+                            </Typography>
+                          }
+                        />
+                      );
+                    })}
+                  </Stack>
+                )}
+              </ChartCard>
+
+              <ChartCard
+                title="Saldos pendientes"
+                subtitle="Registros con menos avance de cobro"
+                icon={<RequestQuoteRoundedIcon />}
+                color={theme.palette.warning.main}
+              >
+                {data.pending.length === 0 ? (
+                  <EmptyBox icon={<PriceCheckRoundedIcon />} text="No hay saldos pendientes." />
+                ) : (
+                  <Stack spacing={0.75}>
+                    {data.pending.map((p) => (
+                      <ListRow
+                        key={p.id}
+                        item={p}
+                        title={p.projectName || "Proyecto sin nombre"}
+                        subtitle={`Falta ${formatMoney(p.pendingAmount, p.currency)}`}
+                        progress={Math.round(p.progress * 100)}
+                        right={
+                          <Typography
+                            sx={{
+                              fontSize: "0.76rem",
+                              fontWeight: 800,
+                              color: theme.palette.app.text,
+                            }}
+                          >
+                            {Math.round(p.progress * 100)}%
+                          </Typography>
+                        }
+                      />
+                    ))}
+                  </Stack>
+                )}
+              </ChartCard>
+
+              <ChartCard
+                title="Proyectos por estado"
+                subtitle={rangeText}
+                icon={<DonutLargeRoundedIcon />}
+                color={theme.palette.primary.main}
+              >
+                {data.projects.length === 0 ? (
+                  <EmptyBox
+                    icon={<RocketLaunchRoundedIcon />}
+                    text="No hay proyectos en este período."
+                  />
+                ) : (
+                  <Donut
+                    total={data.projects.length}
+                    caption="proyectos"
+                    size={170}
+                    items={PROJECT_STATUSES.map(({ key, label, color }) => ({
+                      id: key,
+                      label,
+                      value: data.projectCounts[key],
+                      color: color(theme),
+                    }))}
+                  />
+                )}
+              </ChartCard>
+            </Grid>
+          </Section>
+        </>
+      )}
+    </PageShell>
   );
 }
 
-function PageHeader({ range, taskProgressPercent, projectProgressPercent }) {
-  const theme = useTheme();
+/* ---------- Helpers visuales ---------- */
 
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        ...getCardStyles(theme),
-        p: { xs: 2, sm: 2.4, md: 2.8 },
-      }}
-    >
-      <Stack
-        direction={{ xs: "column", md: "row" }}
-        alignItems={{ xs: "stretch", md: "center" }}
-        justifyContent="space-between"
-        spacing={{ xs: 2.4, md: 3 }}
-      >
-        <Stack direction="row" alignItems="center" spacing={1.6}>
-          <Avatar
-            variant="rounded"
-            sx={{
-              width: { xs: 52, md: 58 },
-              height: { xs: 52, md: 58 },
-              borderRadius: "18px",
-              color: theme.palette.primary.main,
-              backgroundColor: theme.palette.app.primarySoft,
-              border: `1px solid ${theme.palette.app.borderSoft}`,
-            }}
-          >
-            <InsightsRoundedIcon sx={{ fontSize: { xs: 27, md: 31 } }} />
-          </Avatar>
+const compactMoney = (value, currency) => {
+  const prefix = currency === "USD" ? "US$" : "$";
+  if (value >= 1e6) return `${prefix}${(value / 1e6).toFixed(value % 1e6 ? 1 : 0)}M`;
+  if (value >= 1e3) return `${prefix}${Math.round(value / 1e3)}k`;
+  return `${prefix}${value}`;
+};
 
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
-              sx={{
-                color: theme.palette.app.text,
-                fontWeight: 950,
-                letterSpacing: "-0.6px",
-                fontSize: { xs: "1.55rem", sm: "1.85rem", md: "2.15rem" },
-                lineHeight: 1.05,
-              }}
-            >
-              Estadísticas
-            </Typography>
+const sectionTitle = (theme) => ({
+  mb: 1,
+  fontSize: "0.7rem",
+  fontWeight: 800,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  color: theme.palette.app.secondary,
+});
 
-            <Typography
-              sx={{
-                mt: 0.8,
-                color: theme.palette.app.secondary,
-                fontSize: { xs: "0.9rem", md: "0.98rem" },
-                lineHeight: 1.65,
-                fontWeight: 600,
-                maxWidth: 690,
-              }}
-            >
-              Métricas simples para revisar tareas, proyectos, notas y cobros sin
-              sobrecargar el panel.
-            </Typography>
-          </Box>
-        </Stack>
-
-        <Stack
-          direction="row"
-          spacing={1}
-          flexWrap="wrap"
-          justifyContent={{ xs: "flex-start", md: "flex-end" }}
-          sx={{ rowGap: 1 }}
-        >
-          <HeaderPill
-            icon={<CalendarMonthRoundedIcon />}
-            label={getRangeText(range)}
-            color={theme.palette.primary.main}
-          />
-
-          <HeaderPill
-            icon={<TrendingUpRoundedIcon />}
-            label={`${taskProgressPercent}% tareas`}
-            color={theme.palette.success.main}
-          />
-
-          <HeaderPill
-            icon={<WorkspacesRoundedIcon />}
-            label={`${projectProgressPercent}% proyectos`}
-            color={theme.palette.info.main}
-          />
-        </Stack>
-      </Stack>
-    </Card>
-  );
-}
-
-function HeaderPill({ icon, label, color }) {
-  const theme = useTheme();
-
-  return (
-    <Chip
-      icon={icon}
-      label={label}
-      sx={{
-        height: 32,
-        borderRadius: "999px",
-        color,
-        backgroundColor: alpha(color, theme.palette.mode === "dark" ? 0.14 : 0.08),
-        border: `1px solid ${alpha(color, theme.palette.mode === "dark" ? 0.24 : 0.16)}`,
-        fontWeight: 900,
-        "& .MuiChip-icon": {
-          color,
-        },
-      }}
-    />
-  );
-}
-
-function RangeSelector({ range, setRange }) {
-  const theme = useTheme();
-
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        ...getCardStyles(theme),
-        p: { xs: 1.4, md: 1.7 },
-        boxShadow: "none",
-      }}
-    >
-      <Stack
-        direction={{ xs: "column", md: "row" }}
-        alignItems={{ xs: "stretch", md: "center" }}
-        justifyContent="space-between"
-        spacing={1.5}
-      >
-        <Stack direction="row" alignItems="center" spacing={1.2}>
-          <Avatar
-            variant="rounded"
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: "15px",
-              color: theme.palette.primary.main,
-              backgroundColor: theme.palette.app.primarySoft,
-            }}
-          >
-            <CalendarMonthRoundedIcon />
-          </Avatar>
-
-          <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ color: theme.palette.app.text, fontWeight: 950 }}>
-              Rango de análisis
-            </Typography>
-
-            <Typography
-              sx={{
-                mt: 0.2,
-                color: theme.palette.app.secondary,
-                fontSize: 13,
-                fontWeight: 650,
-              }}
-            >
-              Filtrá por fecha de creación.
-            </Typography>
-          </Box>
-        </Stack>
-
-        <Stack direction="row" flexWrap="wrap" gap={1}>
-          {RANGE_OPTIONS.map((item) => {
-            const selected = range === item.value;
-
-            return (
-              <Chip
-                key={item.value}
-                icon={item.icon}
-                label={item.label}
-                clickable
-                onClick={() => setRange(item.value)}
-                sx={{
-                  height: 38,
-                  borderRadius: "999px",
-                  border: `1px solid ${
-                    selected
-                      ? alpha(theme.palette.primary.main, 0.28)
-                      : theme.palette.app.borderSoft
-                  }`,
-                  backgroundColor: selected
-                    ? theme.palette.app.primarySoft
-                    : getSoftBackground(theme),
-                  color: selected ? theme.palette.primary.main : theme.palette.app.secondary,
-                  fontWeight: 950,
-                  transition: "0.18s ease",
-                  "& .MuiChip-icon": {
-                    color: selected ? theme.palette.primary.main : theme.palette.app.secondary,
-                  },
-                  "&:hover": {
-                    transform: "translateY(-1px)",
-                    backgroundColor: theme.palette.app.primarySoft,
-                  },
-                }}
-              />
-            );
-          })}
-        </Stack>
-      </Stack>
-    </Card>
-  );
-}
-
-function MetricGrid({ stats, moneyProgress }) {
-  const theme = useTheme();
-
-  const items = [
-    {
-      title: "Tareas",
-      value: stats.totalTasks,
-      icon: <PendingActionsRoundedIcon />,
-      color: theme.palette.primary.main,
-      helper: `${stats.activeTasks} activas`,
-    },
-    {
-      title: "Completadas",
-      value: stats.completedTasks,
-      icon: <CheckCircleRoundedIcon />,
-      color: theme.palette.success.main,
-      helper: `${stats.pendingTasks} pendientes`,
-    },
-    {
-      title: "Proyectos",
-      value: stats.totalProjects,
-      icon: <FolderRoundedIcon />,
-      color: theme.palette.info.main,
-      helper: `${stats.finishedProjects} finalizados`,
-    },
-    {
-      title: "Cobros",
-      value: `${moneyProgress}%`,
-      icon: <AccountBalanceWalletRoundedIcon />,
-      color: theme.palette.warning.main,
-      helper: `${stats.unpaidPayments + stats.partialPayments} por cobrar`,
-    },
-  ];
-
+function Grid({ columns, children }) {
   return (
     <Box
       sx={{
         display: "grid",
-        gridTemplateColumns: {
-          xs: "1fr 1fr",
-          md: "repeat(4, 1fr)",
-        },
-        gap: { xs: 1.2, md: 1.6 },
+        gridTemplateColumns: columns,
+        gap: { xs: 1.5, md: 1.75 },
+        alignItems: "stretch",
       }}
     >
-      {items.map((item, index) => (
-        <MetricCard key={item.title} {...item} delay={index * 45} />
-      ))}
+      {children}
     </Box>
   );
 }
 
-function MetricCard({ title, value, icon, color, helper, delay = 0 }) {
+function Segmented({ value, onChange, options }) {
+  const theme = useTheme();
+
+  return (
+    <Stack
+      direction="row"
+      sx={{
+        p: 0.4,
+        gap: 0.4,
+        borderRadius: "11px",
+        bgcolor: getSoftBackground(theme),
+        border: `1px solid ${theme.palette.app.borderSoft}`,
+        flexShrink: 0,
+      }}
+    >
+      {options.map((option) => {
+        const selected = value === option.value;
+        return (
+          <Box
+            key={option.value}
+            component="button"
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(option.value)}
+            sx={{
+              all: "unset",
+              px: 1.2,
+              py: 0.55,
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "0.78rem",
+              fontWeight: selected ? 800 : 650,
+              whiteSpace: "nowrap",
+              color: selected ? theme.palette.primary.main : theme.palette.app.secondary,
+              bgcolor: selected ? theme.palette.app.surface : "transparent",
+              boxShadow: selected ? "0 2px 8px rgba(15,23,42,0.08)" : "none",
+              transition: "all 0.16s ease",
+            }}
+          >
+            {option.label}
+          </Box>
+        );
+      })}
+    </Stack>
+  );
+}
+
+const RangeToggle = ({ value, onChange }) => (
+  <Box sx={{ alignSelf: { xs: "flex-start", lg: "center" } }}>
+    <Segmented value={value} onChange={onChange} options={RANGES} />
+  </Box>
+);
+
+function ChartCard({ title, subtitle, icon, color, aside, children }) {
   const theme = useTheme();
 
   return (
     <Card
       elevation={0}
       sx={{
-        ...getCardStyles(theme),
-        ...getSoftFadeSx(delay),
-        p: { xs: 1.55, md: 1.85 },
-        borderRadius: "20px",
-        boxShadow: "none",
-        transition: "all 0.18s ease",
-        "&:hover": {
-          transform: "translateY(-2px)",
-          borderColor: alpha(color, 0.28),
-        },
+        ...getCardStyles(theme, "18px"),
+        p: { xs: 1.6, md: 1.9 },
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        minWidth: 0,
       }}
     >
-      <Stack direction="row" alignItems="center" spacing={1.25}>
-        <Avatar
-          variant="rounded"
+      <Stack direction="row" alignItems="center" spacing={1.2} sx={{ mb: 1.75 }}>
+        <Box
           sx={{
-            width: { xs: 40, md: 44 },
-            height: { xs: 40, md: 44 },
-            borderRadius: "15px",
+            width: 34,
+            height: 34,
+            flexShrink: 0,
+            borderRadius: "10px",
+            display: "grid",
+            placeItems: "center",
             color,
-            backgroundColor: alpha(color, theme.palette.mode === "dark" ? 0.16 : 0.1),
+            bgcolor: softTint(theme, color),
+            "& svg": { fontSize: 19 },
           }}
         >
           {icon}
-        </Avatar>
-
-        <Box sx={{ minWidth: 0 }}>
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography
             noWrap
-            sx={{
-              color: theme.palette.app.text,
-              fontWeight: 950,
-              fontSize: { xs: "1.35rem", md: "1.65rem" },
-              lineHeight: 1,
-              letterSpacing: "-0.5px",
-            }}
-          >
-            {value}
-          </Typography>
-
-          <Typography
-            noWrap
-            sx={{
-              mt: 0.55,
-              color: theme.palette.app.secondary,
-              fontSize: "0.78rem",
-              fontWeight: 850,
-            }}
+            sx={{ color: theme.palette.app.text, fontSize: "0.95rem", fontWeight: 800 }}
           >
             {title}
           </Typography>
-
           <Typography
             noWrap
-            sx={{
-              mt: 0.25,
-              color: theme.palette.app.muted,
-              fontSize: "0.72rem",
-              fontWeight: 650,
-            }}
+            sx={{ color: theme.palette.app.secondary, fontSize: "0.75rem", fontWeight: 600 }}
           >
-            {helper}
+            {subtitle}
           </Typography>
         </Box>
+        {aside}
       </Stack>
+      <Box sx={{ flex: 1, minWidth: 0 }}>{children}</Box>
     </Card>
   );
 }
 
-function ProgressOverview({
-  taskProgressPercent,
-  projectProgressPercent,
-  moneyProgress,
-  stats,
-}) {
+function Donut({ items, total, caption, size = 190 }) {
   const theme = useTheme();
+  const visible = items.filter((item) => item.value > 0);
 
   return (
-    <Card
-      elevation={0}
-      sx={{
-        ...getCardStyles(theme),
-        p: { xs: 2, md: 2.35 },
-        height: "100%",
-      }}
+    <Stack
+      direction={{ xs: "column", sm: "row", lg: "column" }}
+      alignItems="center"
+      spacing={1.5}
+      sx={{ "@media (min-width: 1700px)": { flexDirection: size > 180 ? "row" : "column" } }}
     >
-      <Stack spacing={2}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
-          <Stack direction="row" alignItems="center" spacing={1.35}>
-            <Avatar
-              variant="rounded"
-              sx={{
-                width: 46,
-                height: 46,
-                borderRadius: "16px",
-                color: theme.palette.success.main,
-                backgroundColor: alpha(theme.palette.success.main, 0.12),
-              }}
-            >
-              <TrendingUpRoundedIcon />
-            </Avatar>
-
-            <Box sx={{ minWidth: 0 }}>
-              <Typography
-                sx={{
-                  color: theme.palette.app.text,
-                  fontWeight: 950,
-                  fontSize: "1.05rem",
-                }}
-              >
-                Avance general
-              </Typography>
-
-              <Typography
-                sx={{
-                  mt: 0.25,
-                  color: theme.palette.app.secondary,
-                  fontSize: "0.86rem",
-                  fontWeight: 600,
-                }}
-              >
-                Productividad y cierre del espacio.
-              </Typography>
-            </Box>
-          </Stack>
-
-          <Typography
-            sx={{
-              color: theme.palette.success.main,
-              fontWeight: 950,
-              fontSize: { xs: "2rem", md: "2.45rem" },
-              lineHeight: 1,
-              letterSpacing: "-0.9px",
-            }}
-          >
-            {taskProgressPercent}%
-          </Typography>
-        </Stack>
-
-        <ProgressLine
-          title="Tareas completadas"
-          detail={`${stats.completedTasks} de ${stats.totalTasks}`}
-          value={taskProgressPercent}
-          color={theme.palette.success.main}
-          icon={<CheckCircleRoundedIcon />}
+      <Box sx={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+        <PieChart
+          series={[
+            {
+              data: visible,
+              innerRadius: size * 0.33,
+              outerRadius: size * 0.48,
+              paddingAngle: visible.length > 1 ? 2.5 : 0,
+              cornerRadius: 5,
+              highlightScope: { fade: "global", highlight: "item" },
+            },
+          ]}
+          width={size}
+          height={size}
+          hideLegend
+          margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
         />
-
-        <ProgressLine
-          title="Proyectos finalizados"
-          detail={`${stats.finishedProjects} de ${stats.totalProjects}`}
-          value={projectProgressPercent}
-          color={theme.palette.info.main}
-          icon={<WorkspacesRoundedIcon />}
-        />
-
-        <ProgressLine
-          title="Cobros registrados"
-          detail={`${stats.paidPayments} pagos completos`}
-          value={moneyProgress}
-          color={theme.palette.warning.main}
-          icon={<SavingsRoundedIcon />}
-        />
-
         <Box
           sx={{
+            position: "absolute",
+            inset: 0,
             display: "grid",
-            gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(4, 1fr)" },
-            gap: 1,
-            pt: 0.2,
+            placeItems: "center",
+            pointerEvents: "none",
+            textAlign: "center",
           }}
         >
-          <MiniMetric title="Pend." value={stats.pendingTasks} color={theme.palette.warning.main} />
-          <MiniMetric title="Progr." value={stats.inProgressTasks} color={theme.palette.info.main} />
-          <MiniMetric title="Hechas" value={stats.completedTasks} color={theme.palette.success.main} />
-          <MiniMetric title="Paus." value={stats.pausedTasks} color={theme.palette.app.secondary} />
+          <Box>
+            <Typography
+              sx={{
+                fontSize: "1.5rem",
+                fontWeight: 850,
+                lineHeight: 1,
+                color: theme.palette.app.text,
+              }}
+            >
+              {total}
+            </Typography>
+            <Typography
+              sx={{ fontSize: "0.7rem", fontWeight: 650, color: theme.palette.app.secondary }}
+            >
+              {caption}
+            </Typography>
+          </Box>
         </Box>
+      </Box>
+
+      <Stack spacing={0.6} sx={{ width: "100%", minWidth: 0 }}>
+        {items.map((item) => (
+          <Stack
+            key={item.id}
+            direction="row"
+            alignItems="center"
+            spacing={0.9}
+            sx={{ px: 1, py: 0.6, borderRadius: "9px", bgcolor: getSoftBackground(theme) }}
+          >
+            <Box
+              sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: item.color, flexShrink: 0 }}
+            />
+            <Typography
+              noWrap
+              sx={{
+                flex: 1,
+                fontSize: "0.8rem",
+                fontWeight: 650,
+                color: theme.palette.app.secondary,
+              }}
+            >
+              {item.label}
+            </Typography>
+            <Typography
+              sx={{ fontSize: "0.82rem", fontWeight: 800, color: theme.palette.app.text }}
+            >
+              {item.value}
+            </Typography>
+            <Typography
+              sx={{
+                width: 36,
+                textAlign: "right",
+                fontSize: "0.72rem",
+                fontWeight: 700,
+                color: theme.palette.app.secondary,
+              }}
+            >
+              {percent(item.value, total)}%
+            </Typography>
+          </Stack>
+        ))}
       </Stack>
-    </Card>
+    </Stack>
   );
 }
 
-function ProgressLine({ title, detail, value, icon, color }) {
+function GaugeBox({ value, label, detail, color }) {
   const theme = useTheme();
 
   return (
     <Box
       sx={{
-        borderRadius: "18px",
-        p: 1.45,
-        backgroundColor: getSoftBackground(theme),
+        pt: 1,
+        pb: 1.2,
+        borderRadius: "14px",
+        textAlign: "center",
+        bgcolor: getSoftBackground(theme),
         border: `1px solid ${theme.palette.app.borderSoft}`,
       }}
     >
-      <Stack direction="row" alignItems="center" spacing={1.15} sx={{ mb: 1 }}>
-        <Avatar
-          variant="rounded"
-          sx={{
-            width: 34,
-            height: 34,
-            borderRadius: "13px",
-            color,
-            backgroundColor: alpha(color, theme.palette.mode === "dark" ? 0.16 : 0.1),
-          }}
+      <Gauge
+        value={value}
+        startAngle={-110}
+        endAngle={110}
+        innerRadius="76%"
+        outerRadius="100%"
+        cornerRadius="50%"
+        height={110}
+        text={({ value: v }) => `${v}%`}
+        sx={{
+          [`& .${gaugeClasses.valueText}`]: { fontSize: 20, fontWeight: 800 },
+          [`& .${gaugeClasses.valueText} text`]: { fill: theme.palette.app.text },
+          [`& .${gaugeClasses.valueArc}`]: { fill: color },
+          [`& .${gaugeClasses.referenceArc}`]: {
+            fill: alpha(theme.palette.mode === "dark" ? "#FFFFFF" : "#0F172A", 0.08),
+          },
+        }}
+      />
+      <Typography
+        sx={{ mt: -0.5, fontSize: "0.82rem", fontWeight: 800, color: theme.palette.app.text }}
+      >
+        {label}
+      </Typography>
+      <Typography sx={{ fontSize: "0.72rem", fontWeight: 600, color: theme.palette.app.secondary }}>
+        {detail}
+      </Typography>
+    </Box>
+  );
+}
+
+function BarRow({ icon, label, value, total, color }) {
+  const theme = useTheme();
+  const pct = percent(value, total);
+
+  return (
+    <Box>
+      <Stack direction="row" alignItems="center" spacing={0.6} sx={{ mb: 0.4 }}>
+        <Box sx={{ color, display: "flex", "& svg": { fontSize: 14 } }}>{icon}</Box>
+        <Typography
+          sx={{ flex: 1, fontSize: "0.78rem", fontWeight: 650, color: theme.palette.app.secondary }}
         >
-          {icon}
-        </Avatar>
-
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography noWrap sx={{ color: theme.palette.app.text, fontWeight: 900 }}>
-            {title}
-          </Typography>
-          <Typography noWrap sx={{ color: theme.palette.app.secondary, fontSize: 12.5, fontWeight: 650 }}>
-            {detail}
-          </Typography>
-        </Box>
-
-        <Typography sx={{ color, fontWeight: 950 }}>{value}%</Typography>
+          {label}
+        </Typography>
+        <Typography sx={{ fontSize: "0.78rem", fontWeight: 800, color: theme.palette.app.text }}>
+          {value}
+        </Typography>
       </Stack>
-
       <LinearProgress
         variant="determinate"
-        value={value}
+        value={pct}
         sx={{
-          height: 8,
-          borderRadius: "999px",
-          backgroundColor:
-            theme.palette.mode === "dark" ? alpha("#FFFFFF", 0.08) : alpha("#0F172A", 0.08),
-          "& .MuiLinearProgress-bar": {
-            borderRadius: "999px",
-            backgroundColor: color,
-          },
+          height: 6,
+          borderRadius: 999,
+          bgcolor: alpha(theme.palette.mode === "dark" ? "#FFFFFF" : "#0F172A", 0.07),
+          "& .MuiLinearProgress-bar": { borderRadius: 999, bgcolor: color },
         }}
       />
     </Box>
   );
 }
 
-function MiniMetric({ title, value, color }) {
+function ListRow({ item, title, subtitle, right, progress }) {
   const theme = useTheme();
 
   return (
     <Box
       sx={{
-        borderRadius: "16px",
-        p: 1.25,
-        backgroundColor: getSoftBackground(theme),
+        p: 1,
+        borderRadius: "12px",
+        bgcolor: getSoftBackground(theme),
         border: `1px solid ${theme.palette.app.borderSoft}`,
       }}
     >
-      <Typography
-        sx={{
-          color,
-          fontSize: { xs: "1.3rem", md: "1.45rem" },
-          lineHeight: 1,
-          fontWeight: 950,
-          letterSpacing: "-0.5px",
-        }}
-      >
-        {value}
-      </Typography>
-
-      <Typography
-        noWrap
-        sx={{
-          mt: 0.45,
-          color: theme.palette.app.secondary,
-          fontSize: "0.74rem",
-          fontWeight: 850,
-        }}
-      >
-        {title}
-      </Typography>
-    </Box>
-  );
-}
-
-function ProjectChartCard({ projectPieData, stats, chartsReady, chartKey }) {
-  const theme = useTheme();
-
-  return (
-    <ChartCard
-      title="Proyectos"
-      subtitle="Distribución por estado"
-      icon={<DonutLargeRoundedIcon />}
-      color={theme.palette.primary.main}
-    >
-      {projectPieData.length === 0 ? (
-        <EmptyBox icon={<FolderOpenRoundedIcon />} text="Todavía no hay proyectos para mostrar." />
-      ) : (
-        <Stack spacing={1.8}>
-          <Box
-            sx={{
-              ...getSlowChartSx(),
-              height: { xs: 230, md: 260 },
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            {chartsReady ? (
-              <PieChart
-                key={chartKey}
-                series={[
-                  {
-                    data: projectPieData,
-                    innerRadius: 58,
-                    outerRadius: 104,
-                    paddingAngle: 3,
-                    cornerRadius: 6,
-                    highlightScope: {
-                      faded: "global",
-                      highlighted: "item",
-                    },
-                  },
-                ]}
-                height={255}
-                slotProps={{ legend: { hidden: true } }}
-              />
-            ) : null}
-          </Box>
-
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
-              gap: 1.1,
-            }}
-          >
-            <LegendItem label="Activos" value={stats.activeProjects} color={theme.palette.info.main} />
-            <LegendItem label="Pausados" value={stats.pausedProjects} color={theme.palette.warning.main} />
-            <LegendItem label="Finalizados" value={stats.finishedProjects} color={theme.palette.success.main} />
-          </Box>
-        </Stack>
-      )}
-    </ChartCard>
-  );
-}
-
-function TaskChartCard({ taskBarData, totalTasks, chartsReady, chartKey }) {
-  const theme = useTheme();
-
-  return (
-    <ChartCard
-      title="Tareas por estado"
-      subtitle="Comparación rápida de tus tareas"
-      icon={<BarChartRoundedIcon />}
-      color={theme.palette.info.main}
-    >
-      {totalTasks === 0 ? (
-        <EmptyBox icon={<PendingActionsRoundedIcon />} text="Todavía no hay tareas para graficar." />
-      ) : (
-        <Box
-          sx={{
-            ...getSlowChartSx(),
-            width: "100%",
-            height: { xs: 280, md: 330 },
-          }}
-        >
-          {chartsReady ? (
-            <BarChart
-              key={chartKey}
-              dataset={taskBarData}
-              xAxis={[{ scaleType: "band", dataKey: "label" }]}
-              series={[
-                {
-                  dataKey: "value",
-                  label: "Tareas",
-                  color: theme.palette.primary.main,
-                },
-              ]}
-              height={315}
-              borderRadius={8}
-              grid={{ horizontal: true }}
-              margin={{ top: 28, right: 20, bottom: 35, left: 40 }}
-            />
-          ) : null}
-        </Box>
-      )}
-    </ChartCard>
-  );
-}
-
-function ChartCard({ title, subtitle, icon, color, children }) {
-  const theme = useTheme();
-
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        ...getCardStyles(theme),
-        overflow: "hidden",
-        height: "100%",
-      }}
-    >
-      <Box sx={{ p: { xs: 2, md: 2.4 } }}>
-        <Stack direction="row" alignItems="center" spacing={1.4} sx={{ mb: 2 }}>
-          <Avatar
-            variant="rounded"
-            sx={{
-              width: 46,
-              height: 46,
-              borderRadius: "16px",
-              backgroundColor: alpha(color, theme.palette.mode === "dark" ? 0.16 : 0.1),
-              color,
-            }}
-          >
-            {icon}
-          </Avatar>
-
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
-              sx={{
-                color: theme.palette.app.text,
-                fontSize: { xs: "1rem", md: "1.15rem" },
-                fontWeight: 950,
-                letterSpacing: "-0.2px",
-              }}
-            >
-              {title}
-            </Typography>
-
-            <Typography
-              sx={{
-                mt: 0.25,
-                color: theme.palette.app.secondary,
-                fontSize: { xs: "0.82rem", md: "0.9rem" },
-                lineHeight: 1.45,
-                fontWeight: 600,
-              }}
-            >
-              {subtitle}
-            </Typography>
-          </Box>
-        </Stack>
-
-        {children}
-      </Box>
-    </Card>
-  );
-}
-
-function LegendItem({ label, value, color }) {
-  const theme = useTheme();
-
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        borderRadius: "18px",
-        backgroundColor: getSoftBackground(theme),
-        border: `1px solid ${theme.palette.app.borderSoft}`,
-        boxShadow: "none",
-      }}
-    >
-      <Stack direction="row" alignItems="center" spacing={1.15} sx={{ p: 1.35 }}>
-        <Box
-          sx={{
-            width: 11,
-            height: 11,
-            borderRadius: "999px",
-            backgroundColor: color,
-            boxShadow: `0 0 0 5px ${alpha(color, 0.12)}`,
-            flexShrink: 0,
-          }}
-        />
-
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ color: theme.palette.app.text, fontSize: 18, fontWeight: 950, lineHeight: 1 }}>
-            {value}
-          </Typography>
-
-          <Typography noWrap sx={{ mt: 0.45, color: theme.palette.app.secondary, fontSize: 12, fontWeight: 850 }}>
-            {label}
-          </Typography>
-        </Box>
-      </Stack>
-    </Card>
-  );
-}
-
-function FinancialSummary({ stats }) {
-  const theme = useTheme();
-
-  return (
-    <ChartCard
-      title="Resumen financiero"
-      subtitle="Cobrado y pendiente por moneda"
-      icon={<AccountBalanceWalletRoundedIcon />}
-      color={theme.palette.primary.main}
-    >
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: {
-            xs: "1fr",
-            sm: "repeat(2, 1fr)",
-            lg: "repeat(4, 1fr)",
-          },
-          gap: 1.3,
-        }}
-      >
-        <MoneyBox
-          title="Cobrado ARS"
-          value={formatMoney(stats.money.ARS.paid, "ARS")}
-          icon={<PriceCheckRoundedIcon />}
-          color={theme.palette.success.main}
-        />
-
-        <MoneyBox
-          title="Pendiente ARS"
-          value={formatMoney(stats.money.ARS.pending, "ARS")}
-          icon={<AccessTimeRoundedIcon />}
-          color={theme.palette.warning.main}
-        />
-
-        <MoneyBox
-          title="Cobrado USD"
-          value={formatMoney(stats.money.USD.paid, "USD")}
-          icon={<AttachMoneyRoundedIcon />}
-          color={theme.palette.success.main}
-        />
-
-        <MoneyBox
-          title="Pendiente USD"
-          value={formatMoney(stats.money.USD.pending, "USD")}
-          icon={<RequestQuoteRoundedIcon />}
-          color={theme.palette.warning.main}
-        />
-      </Box>
-    </ChartCard>
-  );
-}
-
-function MoneyBox({ title, value, icon, color }) {
-  const theme = useTheme();
-
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        borderRadius: "18px",
-        backgroundColor: getSoftBackground(theme),
-        border: `1px solid ${theme.palette.app.borderSoft}`,
-        boxShadow: "none",
-      }}
-    >
-      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ p: 1.55 }}>
-        <Avatar
-          variant="rounded"
-          sx={{
-            width: 42,
-            height: 42,
-            borderRadius: "15px",
-            backgroundColor: alpha(color, theme.palette.mode === "dark" ? 0.16 : 0.1),
-            color,
-          }}
-        >
-          {icon}
-        </Avatar>
-
-        <Box sx={{ minWidth: 0 }}>
+      <Stack direction="row" alignItems="center" spacing={1.1}>
+        <ProjectAvatar item={item} size={30} fontSize={13} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography
             noWrap
-            sx={{
-              color: theme.palette.app.text,
-              fontSize: { xs: "1rem", md: "1.12rem" },
-              fontWeight: 950,
-              letterSpacing: "-0.15px",
-            }}
-          >
-            {value}
-          </Typography>
-
-          <Typography
-            noWrap
-            sx={{
-              mt: 0.35,
-              color: theme.palette.app.secondary,
-              fontSize: "0.78rem",
-              fontWeight: 850,
-            }}
+            sx={{ fontSize: "0.84rem", fontWeight: 750, color: theme.palette.app.text }}
           >
             {title}
           </Typography>
+          <Typography
+            noWrap
+            sx={{ fontSize: "0.72rem", fontWeight: 600, color: theme.palette.app.secondary }}
+          >
+            {subtitle}
+          </Typography>
         </Box>
+        <Box sx={{ flexShrink: 0 }}>{right}</Box>
       </Stack>
-    </Card>
+      {progress !== undefined && (
+        <LinearProgress
+          variant="determinate"
+          value={progress}
+          sx={{
+            mt: 0.9,
+            height: 4,
+            borderRadius: 999,
+            bgcolor: alpha(theme.palette.mode === "dark" ? "#FFFFFF" : "#0F172A", 0.07),
+            "& .MuiLinearProgress-bar": {
+              borderRadius: 999,
+              bgcolor: progress > 0 ? theme.palette.warning.main : theme.palette.error.main,
+            },
+          }}
+        />
+      )}
+    </Box>
   );
 }
 
@@ -1403,41 +923,24 @@ function EmptyBox({ text, icon }) {
   const theme = useTheme();
 
   return (
-    <Card
-      elevation={0}
+    <Box
       sx={{
-        borderRadius: "18px",
-        backgroundColor: getSoftBackground(theme),
-        border: `1px dashed ${theme.palette.app.borderSoft}`,
-        boxShadow: "none",
+        height: "100%",
+        minHeight: 140,
+        p: 2,
+        borderRadius: "14px",
+        border: `1.5px dashed ${theme.palette.app.borderSoft}`,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        textAlign: "center",
+        color: theme.palette.app.secondary,
+        "& svg": { fontSize: 28, mb: 0.75, opacity: 0.6 },
       }}
     >
-      <Stack
-        alignItems="center"
-        justifyContent="center"
-        sx={{
-          minHeight: 150,
-          p: 2,
-          textAlign: "center",
-          color: theme.palette.app.secondary,
-        }}
-      >
-        <Box
-          sx={{
-            display: "flex",
-            mb: 1,
-            "& svg": {
-              fontSize: 36,
-            },
-          }}
-        >
-          {icon}
-        </Box>
-
-        <Typography sx={{ color: theme.palette.app.secondary, fontWeight: 750 }}>
-          {text}
-        </Typography>
-      </Stack>
-    </Card>
+      {icon}
+      <Typography sx={{ fontSize: "0.82rem", fontWeight: 600 }}>{text}</Typography>
+    </Box>
   );
 }

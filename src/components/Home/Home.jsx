@@ -1,1764 +1,1150 @@
-// Importaciones:
-import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
-import {
-  Avatar,
-  Box,
-  Card,
-  Chip,
-  Divider,
-  Skeleton,
-  Stack,
-  Typography,
-} from "@mui/material";
-import { alpha, keyframes, useTheme } from "@mui/material/styles";
-import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
-import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
-import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
-import FolderOpenRoundedIcon from "@mui/icons-material/FolderOpenRounded";
-import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
-import PendingActionsRoundedIcon from "@mui/icons-material/PendingActionsRounded";
-import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
-import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
-import FormatListBulletedRoundedIcon from "@mui/icons-material/FormatListBulletedRounded";
-import PauseCircleRoundedIcon from "@mui/icons-material/PauseCircleRounded";
-import PaymentsRoundedIcon from "@mui/icons-material/PaymentsRounded";
+//Home:
+import { useMemo } from "react";
+import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { Box, Button, Card, LinearProgress, Skeleton, Tooltip, Typography } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
+import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
+import AssignmentRoundedIcon from "@mui/icons-material/AssignmentRounded";
+import EventBusyRoundedIcon from "@mui/icons-material/EventBusyRounded";
+import EventRoundedIcon from "@mui/icons-material/EventRounded";
+import KeyRoundedIcon from "@mui/icons-material/KeyRounded";
+import LinkRoundedIcon from "@mui/icons-material/LinkRounded";
 import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
+import PaymentsRoundedIcon from "@mui/icons-material/PaymentsRounded";
+import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
+import StorageRoundedIcon from "@mui/icons-material/StorageRounded";
+import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
+import WorkspacesRoundedIcon from "@mui/icons-material/WorkspacesRounded";
 import { db } from "../../firebase/firebase";
-import { useAuth } from "../../context/AuthContext";
-import appLogoDark from "../../assets/images/logo-light.png";
+import useUserCollection, { byCreatedDesc } from "../../shared/hooks/useUserCollection";
+import { formatMoney, withPaymentInfo } from "../../shared/utils";
+import {
+  EmptyState,
+  ProjectAvatar,
+  Section,
+  Stack,
+  getCardStyles,
+  getSoftBackground,
+  getSoftFadeSx,
+  softTint,
+} from "../../shared/ui";
+import { ChecklistItems, DoneToggle, MetaPill } from "../Tareas/TaskCard";
+import {
+  PRIORITY,
+  getChecklist,
+  getChecklistProgress,
+  getDueColor,
+  getDueInfo,
+  getStatusLabel,
+  getStatusRank,
+  isOverdue,
+  sortTasks,
+} from "../Tareas/taskUtils";
+import logoIcon from "../../assets/images/logo-icon.png";
 
-//JSX:
-// Animaciones:
-const fadeInUp = keyframes`
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
+const taskRef = (id) => doc(db, "tasks", id);
 
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-`;
-
-const softFadeIn = keyframes`
-  from {
-    opacity: 0;
-    transform: scale(0.985);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-`;
-
-const getFadeInSx = (delay = 0) => ({
-  opacity: 0,
-  animation: `${fadeInUp} 420ms ease forwards`,
-  animationDelay: `${delay}ms`,
-});
-
-const getSoftFadeSx = (delay = 0) => ({
-  opacity: 0,
-  animation: `${softFadeIn} 380ms ease forwards`,
-  animationDelay: `${delay}ms`,
-});
-
-// Funciones auxiliares:
-const hexToRgba = (hex, opacity = 1) => {
-  const clean = String(hex || "").replace("#", "");
-
-  const full =
-    clean.length === 3
-      ? clean
-          .split("")
-          .map((character) => character + character)
-          .join("")
-      : clean;
-
-  const r = parseInt(full.slice(0, 2), 16);
-  const g = parseInt(full.slice(2, 4), 16);
-  const b = parseInt(full.slice(4, 6), 16);
-
-  if ([r, g, b].some((value) => Number.isNaN(value))) {
-    return `rgba(37, 99, 235, ${opacity})`;
-  }
-
-  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-};
-
-const getTaskDateValue = (task) => {
-  return task?.createdAt?.seconds || task?.updatedAt?.seconds || 0;
-};
-
-const getPaidAmount = (payment) => {
-  return (payment?.installments || []).reduce((total, installment) => {
-    return total + Number(installment?.amount || 0);
-  }, 0);
-};
-
-const getPaymentStatus = (payment) => {
-  const total = Number(payment?.totalAmount || 0);
-  const paid = getPaidAmount(payment);
-
-  if (total > 0 && paid >= total) return "pagado";
-  if (paid > 0 && paid < total) return "parcial";
-
-  return "no_pagado";
-};
-
-const sortTasksLikeMainList = (a, b) => {
-  const orderA = a.order ?? 999999;
-  const orderB = b.order ?? 999999;
-
-  if (orderA !== orderB) return orderA - orderB;
-
-  return getTaskDateValue(b) - getTaskDateValue(a);
-};
-
-const getStatusLabel = (status) => {
-  if (status === "pendiente") return "Pendiente";
-  if (status === "en progreso") return "En progreso";
-  if (status === "completada") return "Completada";
-  if (status === "pausada") return "Pausada";
-
-  return "Sin estado";
-};
-
-const getStatusColor = (theme, status) => {
-  if (status === "pendiente") return theme.palette.warning.main;
-  if (status === "en progreso") return theme.palette.info.main;
-  if (status === "completada") return theme.palette.success.main;
-  if (status === "pausada") return theme.palette.app.secondary;
-
-  return theme.palette.primary.main;
-};
-
-const getStatusIcon = (status) => {
-  if (status === "pendiente") return <PendingActionsRoundedIcon />;
-  if (status === "en progreso") return <AccessTimeRoundedIcon />;
-  if (status === "completada") return <CheckCircleRoundedIcon />;
-  if (status === "pausada") return <PauseCircleRoundedIcon />;
-
-  return <FormatListBulletedRoundedIcon />;
-};
-
-const getCardStyles = (theme) => ({
-  borderRadius: "24px",
-  border: `1px solid ${theme.palette.app.borderSoft}`,
-  backgroundColor: theme.palette.app.surface,
-  backgroundImage: "none",
-  boxShadow:
-    theme.palette.mode === "dark"
-      ? "0 18px 48px rgba(0, 0, 0, 0.18)"
-      : "0 16px 42px rgba(15, 23, 42, 0.045)",
-});
-
-const getSoftBackground = (theme) => {
-  return theme.palette.mode === "dark"
-    ? alpha("#FFFFFF", 0.035)
-    : alpha("#0F172A", 0.025);
-};
-
-const getProjectLogoBackground = (theme, projectColor) => {
-  if (theme.palette.mode === "dark") {
-    return alpha("#FFFFFF", 0.94);
-  }
-
-  return hexToRgba(projectColor || theme.palette.primary.main, 0.08);
-};
-
-const getProjectLogoBorder = (theme, projectColor) => {
-  return hexToRgba(
-    projectColor || theme.palette.primary.main,
-    theme.palette.mode === "dark" ? 0.34 : 0.18
-  );
-};
-
-// JSX:
-const Home = () => {
+const Home = ({ onNavigate }) => {
   const theme = useTheme();
-  const { user } = useAuth();
+  const [tasks, loadingTasks, , setTasks] = useUserCollection("tasks", { sort: sortTasks });
+  const [projects, loadingProjects] = useUserCollection("projects");
+  const [payments, loadingPayments] = useUserCollection("payments");
+  const [notes, loadingNotes] = useUserCollection("notes", { sort: byCreatedDesc });
+  const [links] = useUserCollection("projectLinks");
+  const [credentials] = useUserCollection("credentials");
+  const [databases] = useUserCollection("databasesInfo");
+  const loading = loadingTasks || loadingProjects || loadingPayments || loadingNotes;
+  const go = (section) => onNavigate?.(section);
+  const openTasks = useMemo(
+    () =>
+      tasks
+        .filter((task) => task.status !== "completada")
+        .sort((a, b) => getStatusRank(a.status) - getStatusRank(b.status) || sortTasks(a, b)),
+    [tasks],
+  );
+  const focus = openTasks[0] || null;
+  const focusProject = projects.find((project) => project.id === focus?.projectId) || null;
 
-  const [tasks, setTasks] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [payments, setPayments] = useState([]);
-  const [notes, setNotes] = useState([]);
-  const [tasksLoaded, setTasksLoaded] = useState(false);
-  const [projectsLoaded, setProjectsLoaded] = useState(false);
-  const [paymentsLoaded, setPaymentsLoaded] = useState(false);
-  const [notesLoaded, setNotesLoaded] = useState(false);
+  const summary = useMemo(() => {
+    const dueSoon = openTasks.filter((task) => {
+      const due = getDueInfo(task);
+      return due && due.days >= 0 && due.days <= 7;
+    }).length;
+    const pending = payments.map(withPaymentInfo).filter((p) => p.pendingAmount > 0);
+    const now = new Date();
+    const received = payments
+      .flatMap((p) =>
+        (p.installments || []).map((i) => ({
+          ...i,
+          date: new Date(i.date),
+          currency: p.currency || "ARS",
+          projectId: p.projectId,
+          projectName: p.projectName,
+          projectColor: p.projectColor,
+          projectLogoUrl: p.projectLogoUrl,
+        })),
+      )
+      .filter((i) => !Number.isNaN(i.date.getTime()))
+      .sort((a, b) => b.date - a.date);
+    const collectedMonth = received
+      .filter(
+        (i) => i.date.getFullYear() === now.getFullYear() && i.date.getMonth() === now.getMonth(),
+      )
+      .reduce((acc, i) => {
+        acc[i.currency] = (acc[i.currency] || 0) + Number(i.amount || 0);
+        return acc;
+      }, {});
 
-  const loading = !tasksLoaded || !projectsLoaded || !paymentsLoaded || !notesLoaded;
+    const toCollect = pending.reduce((acc, p) => {
+      acc[p.currency] = (acc[p.currency] || 0) + p.pendingAmount;
+      return acc;
+    }, {});
 
-  useEffect(() => {
-    if (!user?.uid) {
-      setTasks([]);
-      setProjects([]);
-      setPayments([]);
-      setNotes([]);
-      setTasksLoaded(true);
-      setProjectsLoaded(true);
-      setPaymentsLoaded(true);
-      setNotesLoaded(true);
-      return;
-    }
-
-    const tasksQuery = query(
-      collection(db, "tasks"),
-      where("userId", "==", user.uid)
-    );
-
-    const projectsQuery = query(
-      collection(db, "projects"),
-      where("userId", "==", user.uid)
-    );
-
-    const paymentsQuery = query(
-      collection(db, "payments"),
-      where("userId", "==", user.uid)
-    );
-
-    const notesQuery = query(
-      collection(db, "notes"),
-      where("userId", "==", user.uid)
-    );
-
-    const unsubscribeTasks = onSnapshot(
-      tasksQuery,
-      (snapshot) => {
-        const data = snapshot.docs
-          .map((document) => ({
-            id: document.id,
-            ...document.data(),
-          }))
-          .sort(sortTasksLikeMainList);
-
-        setTasks(data);
-        setTasksLoaded(true);
-      },
-      (error) => {
-        console.error("Error cargando tareas:", error);
-        setTasks([]);
-        setTasksLoaded(true);
-      }
-    );
-
-    const unsubscribeProjects = onSnapshot(
-      projectsQuery,
-      (snapshot) => {
-        const data = snapshot.docs.map((document) => ({
-          id: document.id,
-          ...document.data(),
-        }));
-
-        setProjects(data);
-        setProjectsLoaded(true);
-      },
-      (error) => {
-        console.error("Error cargando proyectos:", error);
-        setProjects([]);
-        setProjectsLoaded(true);
-      }
-    );
-
-    const unsubscribePayments = onSnapshot(
-      paymentsQuery,
-      (snapshot) => {
-        const data = snapshot.docs.map((document) => ({
-          id: document.id,
-          ...document.data(),
-        }));
-
-        setPayments(data);
-        setPaymentsLoaded(true);
-      },
-      (error) => {
-        console.error("Error cargando pagos:", error);
-        setPayments([]);
-        setPaymentsLoaded(true);
-      }
-    );
-
-    const unsubscribeNotes = onSnapshot(
-      notesQuery,
-      (snapshot) => {
-        const data = snapshot.docs
-          .map((document) => ({
-            id: document.id,
-            ...document.data(),
-          }))
-          .sort(sortTasksLikeMainList);
-
-        setNotes(data);
-        setNotesLoaded(true);
-      },
-      (error) => {
-        console.error("Error cargando notas:", error);
-        setNotes([]);
-        setNotesLoaded(true);
-      }
-    );
-
-    return () => {
-      unsubscribeTasks();
-      unsubscribeProjects();
-      unsubscribePayments();
-      unsubscribeNotes();
-    };
-  }, [user]);
-
-  const featuredTask = useMemo(() => {
-    return tasks[0] || null;
-  }, [tasks]);
-
-  const featuredProject = useMemo(() => {
-    if (!featuredTask?.projectId) return null;
-
-    return (
-      projects.find((project) => project.id === featuredTask.projectId) || null
-    );
-  }, [featuredTask, projects]);
-
-  const stats = useMemo(() => {
-    const pendingTasks = tasks.filter(
-      (task) => task.status === "pendiente"
-    ).length;
-
-    const inProgressTasks = tasks.filter(
-      (task) => task.status === "en progreso"
-    ).length;
-
-    const completedTasks = tasks.filter(
-      (task) => task.status === "completada"
-    ).length;
-
-    const pausedTasks = tasks.filter((task) => task.status === "pausada").length;
-
-    const activeTasks = pendingTasks + inProgressTasks;
-
-    const inProgressPercent =
-      activeTasks > 0 ? Math.round((inProgressTasks / activeTasks) * 100) : 0;
-
-    const activeProjects = projects.filter(
-      (project) => project.status === "activo"
-    ).length;
-
-    const finishedProjects = projects.filter(
-      (project) => project.status === "finalizado"
-    ).length;
-
-    const paymentsWithStatus = payments.map((payment) => ({
-      ...payment,
-      paymentStatus: getPaymentStatus(payment),
-    }));
-
-    const unpaidPayments = paymentsWithStatus.filter(
-      (payment) => payment.paymentStatus === "no_pagado"
-    ).length;
-
-    const partialPayments = paymentsWithStatus.filter(
-      (payment) => payment.paymentStatus === "parcial"
-    ).length;
-
-    const paidPayments = paymentsWithStatus.filter(
-      (payment) => payment.paymentStatus === "pagado"
-    ).length;
+    const activeProjects = projects
+      .filter((project) => project.status === "activo")
+      .map((project) => {
+        const own = tasks.filter((task) => task.projectId === project.id);
+        const done = own.filter((task) => task.status === "completada").length;
+        return { ...project, taskTotal: own.length, taskDone: done };
+      })
+      .sort((a, b) => b.taskTotal - b.taskDone - (a.taskTotal - a.taskDone))
+      .slice(0, 4);
 
     return {
-      totalTasks: tasks.length,
-      pendingTasks,
-      inProgressTasks,
-      completedTasks,
-      pausedTasks,
-      activeTasks,
-      inProgressPercent,
+      overdue: tasks.filter(isOverdue).length,
+      dueSoon,
+      pending: pending.sort((a, b) => a.progress - b.progress),
+      toCollect,
+      received,
+      collectedMonth,
       activeProjects,
-      finishedProjects,
-      totalProjects: projects.length,
-      unpaidPayments,
-      partialPayments,
-      paidPayments,
-      totalPayments: payments.length,
+      activeCount: projects.filter((project) => project.status === "activo").length,
     };
-  }, [tasks, projects, payments]);
+  }, [tasks, openTasks, projects, payments]);
 
-  const firstTasks = useMemo(() => {
-    return tasks.slice(0, 4);
-  }, [tasks]);
+  const firstOrder = () => Math.min(0, ...tasks.map((task) => task.order ?? 0)) - 1;
+  const updateTask = async (task, changes) => {
+    setTasks((current) => current.map((t) => (t.id === task.id ? { ...t, ...changes } : t)));
+    try {
+      await updateDoc(taskRef(task.id), { ...changes, updatedAt: serverTimestamp() });
+    } catch (error) {
+      console.error(error);
+    }
+  };
+  const completeTask = (task) => updateTask(task, { status: "completada", order: firstOrder() });
+  const toggleItem = (task, itemId) => {
+    const checklist = getChecklist(task).map((item) =>
+      item.id === itemId ? { ...item, done: !item.done } : item,
+    );
+    const { allDone } = getChecklistProgress(checklist);
+    updateTask(task, {
+      checklist,
+      ...(allDone && { status: "completada", order: firstOrder() }),
+    });
+  };
 
-  const recentNotes = useMemo(() => {
-    return notes
-      .slice(0, 2)
-      .map((note) => {
-        const relatedProject = note.projectId
-          ? projects.find((project) => project.id === note.projectId)
-          : null;
+  if (loading) return <HomeSkeleton />;
 
-        return {
-          ...note,
-          projectName:
-            note.projectName || relatedProject?.name || "Nota personal",
-          projectLogoUrl: note.projectLogoUrl || relatedProject?.logoUrl || null,
-          projectColor:
-            note.projectColor || relatedProject?.color || theme.palette.primary.main,
-        };
-      });
-  }, [notes, projects, theme.palette.primary.main]);
+  const isEmpty = !tasks.length && !projects.length && !payments.length && !notes.length;
+  if (isEmpty)
+    return (
+      <Box sx={{ width: "100%", maxWidth: 1280, mx: "auto" }}>
+        <EmptyState
+          icon={<RocketLaunchRoundedIcon />}
+          title="¡Bienvenido a CodeDesk!"
+          text="Empezá creando tu primer proyecto. Después vas a poder sumarle tareas, cobros, notas, enlaces y accesos."
+          actionLabel="Crear proyecto"
+          actionIcon={<WorkspacesRoundedIcon />}
+          onAction={() => go("proyectos")}
+        />
+      </Box>
+    );
+
+  const upcoming = openTasks.slice(1, 6);
+  const collectEntries = Object.entries(summary.toCollect);
 
   return (
-    <Box
-      sx={{
-        width: "100%",
-        maxWidth: 1280,
-        mx: "auto",
-        pb: { xs: 4, md: 6 },
-      }}
-    >
-      <Stack spacing={{ xs: 2, md: 2.4 }}>
-        {loading ? (
-          <HomeSkeleton />
-        ) : (
-          <>
-            <Box sx={getFadeInSx(0)}>
-              <HeaderCard />
-            </Box>
+    <Box sx={{ width: "100%", maxWidth: 1280, mx: "auto", pb: { xs: 4, md: 6 } }}>
+      <Stack spacing={{ xs: 1.5, md: 1.75 }}>
+        {/* Fila 1: tarea en foco + resumen del día */}
+        <Section>
+          <Grid columns={{ xs: "1fr", lg: "minmax(0, 1.65fr) minmax(0, 1fr)" }}>
+            <FocusCard
+              task={focus}
+              project={focusProject}
+              next={openTasks[1]}
+              onToggleItem={(itemId) => toggleItem(focus, itemId)}
+              onComplete={() => completeTask(focus)}
+              onGo={() => go("tareas")}
+            />
 
-            <Box sx={getFadeInSx(70)}>
-              <OverviewGrid stats={stats} />
-            </Box>
+            <Panel title="Tu resumen" icon={<AssignmentRoundedIcon />}>
+              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
+                <MiniStat
+                  label="Tareas abiertas"
+                  value={openTasks.length}
+                  color={theme.palette.info.main}
+                  icon={<AssignmentRoundedIcon />}
+                  onClick={() => go("tareas")}
+                />
+                <MiniStat
+                  label="Vencidas"
+                  value={summary.overdue}
+                  color={summary.overdue ? theme.palette.error.main : theme.palette.success.main}
+                  icon={<EventBusyRoundedIcon />}
+                  onClick={() => go("tareas")}
+                />
+                <MiniStat
+                  label="Vencen en 7 días"
+                  value={summary.dueSoon}
+                  color={theme.palette.warning.main}
+                  icon={<EventRoundedIcon />}
+                  onClick={() => go("tareas")}
+                />
+                <MiniStat
+                  label="Proyectos activos"
+                  value={summary.activeCount}
+                  color={theme.palette.primary.main}
+                  icon={<WorkspacesRoundedIcon />}
+                  onClick={() => go("proyectos")}
+                />
+              </Box>
 
-            <Box
-              sx={{
-                ...getFadeInSx(140),
-                display: "grid",
-                gridTemplateColumns: {
-                  xs: "1fr",
-                  lg: "1fr 1fr",
-                },
-                gap: { xs: 2, md: 2.4 },
-                alignItems: "stretch",
-              }}
+              <Typography sx={{ ...sectionTitle(theme), mt: 2 }}>Accesos rápidos</Typography>
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gap: 0.75,
+                }}
+              >
+                {[
+                  { id: "notas", label: "Notas", icon: <NotesRoundedIcon />, count: notes.length },
+                  {
+                    id: "enlaces",
+                    label: "Enlaces",
+                    icon: <LinkRoundedIcon />,
+                    count: links.length,
+                  },
+                  {
+                    id: "credenciales",
+                    label: "Accesos",
+                    icon: <KeyRoundedIcon />,
+                    count: credentials.length,
+                  },
+                  {
+                    id: "database",
+                    label: "Bases",
+                    icon: <StorageRoundedIcon />,
+                    count: databases.length,
+                  },
+                  {
+                    id: "pagos",
+                    label: "Pagos",
+                    icon: <PaymentsRoundedIcon />,
+                    count: payments.length,
+                  },
+                  {
+                    id: "proyectos",
+                    label: "Proyectos",
+                    icon: <WorkspacesRoundedIcon />,
+                    count: projects.length,
+                  },
+                ].map((item) => (
+                  <QuickLink key={item.id} {...item} onClick={() => go(item.id)} />
+                ))}
+              </Box>
+            </Panel>
+          </Grid>
+        </Section>
+
+        {/* Fila 2: próximas tareas + por cobrar */}
+        <Section delay={80}>
+          <Grid columns={{ xs: "1fr", lg: "minmax(0, 1.65fr) minmax(0, 1fr)" }}>
+            <Panel
+              title="Próximas tareas"
+              subtitle="Según el orden de tu tablero"
+              icon={<TaskAltRoundedIcon />}
+              onMore={() => go("tareas")}
             >
-              <ProjectInProgressCard
-                task={featuredTask}
-                project={featuredProject}
-              />
+              {upcoming.length === 0 ? (
+                <EmptyRow
+                  icon={<TaskAltRoundedIcon />}
+                  text={
+                    focus ? "No hay más tareas en cola." : "No tenés tareas abiertas. ¡Todo al día!"
+                  }
+                />
+              ) : (
+                <Stack spacing={0.75}>
+                  {upcoming.map((task, index) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      delay={index * 40}
+                      onComplete={() => completeTask(task)}
+                      onOpen={() => go("tareas")}
+                    />
+                  ))}
+                </Stack>
+              )}
+            </Panel>
 
-              <ProjectsResume
-                activeProjects={stats.activeProjects}
-                finishedProjects={stats.finishedProjects}
-                totalProjects={stats.totalProjects}
-              />
-            </Box>
-
-            <Box
-              sx={{
-                ...getFadeInSx(210),
-                display: "grid",
-                gridTemplateColumns: {
-                  xs: "1fr",
-                  lg: "1fr 1fr",
-                },
-                gap: { xs: 2, md: 2.4 },
-              }}
+            <Panel
+              title="Por cobrar"
+              subtitle="Saldos pendientes de tus proyectos"
+              icon={<PaymentsRoundedIcon />}
+              iconColor={theme.palette.warning.main}
+              onMore={() => go("pagos")}
             >
-              <TaskSection
-                title="Tareas"
-                subtitle="Estas son tus siguientes tareas según tu orden principal"
-                tasks={firstTasks}
-                icon={<FormatListBulletedRoundedIcon />}
-                color={theme.palette.primary.main}
-              />
+              {collectEntries.length === 0 ? (
+                <Typography
+                  sx={{
+                    mb: 1,
+                    fontSize: "0.86rem",
+                    fontWeight: 650,
+                    color: theme.palette.success.main,
+                  }}
+                >
+                  No tenés saldos pendientes. ¡Todo cobrado!
+                </Typography>
+              ) : (
+                <>
+                  <Stack direction="row" sx={{ gap: 2.5, flexWrap: "wrap", mb: 1.5 }}>
+                    {collectEntries.map(([currency, amount]) => (
+                      <Box key={currency}>
+                        <Typography
+                          sx={{
+                            fontSize: "1.45rem",
+                            fontWeight: 850,
+                            letterSpacing: "-0.5px",
+                            lineHeight: 1.1,
+                            color: theme.palette.app.text,
+                          }}
+                        >
+                          {formatMoney(amount, currency)}
+                        </Typography>
+                        <Typography
+                          sx={{
+                            fontSize: "0.74rem",
+                            fontWeight: 650,
+                            color: theme.palette.app.secondary,
+                          }}
+                        >
+                          Pendiente en {currency === "USD" ? "dólares" : "pesos"}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                  <Stack spacing={0.75}>
+                    {summary.pending.slice(0, 2).map((p) => (
+                      <ProgressRow
+                        key={p.id}
+                        item={p}
+                        title={p.projectName || "Proyecto sin nombre"}
+                        subtitle={`Falta ${formatMoney(p.pendingAmount, p.currency)}`}
+                        value={Math.round(p.progress * 100)}
+                        color={theme.palette.warning.main}
+                      />
+                    ))}
+                  </Stack>
+                </>
+              )}
 
-              <WorkspaceSummaryCard stats={stats} notes={recentNotes} />
-            </Box>
-          </>
-        )}
+              {/* Cobrado este mes + últimos pagos recibidos */}
+              <Box
+                sx={{ mt: 1.75, pt: 1.5, borderTop: `1px solid ${theme.palette.app.borderSoft}` }}
+              >
+                <Stack
+                  direction="row"
+                  alignItems="baseline"
+                  justifyContent="space-between"
+                  sx={{ mb: 1 }}
+                >
+                  <Typography sx={{ ...sectionTitle(theme), mb: 0 }}>Cobrado este mes</Typography>
+                  <Stack direction="row" sx={{ gap: 1.25 }}>
+                    {(Object.keys(summary.collectedMonth).length
+                      ? Object.entries(summary.collectedMonth)
+                      : [["ARS", 0]]
+                    ).map(([currency, amount]) => (
+                      <Typography
+                        key={currency}
+                        sx={{
+                          fontSize: "0.92rem",
+                          fontWeight: 850,
+                          color: amount ? theme.palette.success.main : theme.palette.app.secondary,
+                        }}
+                      >
+                        {formatMoney(amount, currency)}
+                      </Typography>
+                    ))}
+                  </Stack>
+                </Stack>
+
+                {summary.received.length === 0 ? (
+                  <Typography
+                    sx={{ fontSize: "0.8rem", fontWeight: 600, color: theme.palette.app.secondary }}
+                  >
+                    Todavía no registraste pagos recibidos.
+                  </Typography>
+                ) : (
+                  <Stack spacing={0.6}>
+                    <Typography
+                      sx={{
+                        fontSize: "0.72rem",
+                        fontWeight: 700,
+                        color: theme.palette.app.secondary,
+                      }}
+                    >
+                      Últimos pagos recibidos
+                    </Typography>
+                    {summary.received.slice(0, 3).map((item) => (
+                      <PaymentRow key={`${item.projectId}-${item.id}`} item={item} />
+                    ))}
+                  </Stack>
+                )}
+              </Box>
+            </Panel>
+          </Grid>
+        </Section>
+
+        {/* Fila 3: proyectos activos + notas recientes */}
+        <Section delay={160}>
+          <Grid columns={{ xs: "1fr", md: "1fr 1fr" }}>
+            <Panel
+              title="Proyectos activos"
+              subtitle="Avance según sus tareas"
+              icon={<WorkspacesRoundedIcon />}
+              onMore={() => go("proyectos")}
+            >
+              {summary.activeProjects.length === 0 ? (
+                <EmptyRow icon={<WorkspacesRoundedIcon />} text="No tenés proyectos activos." />
+              ) : (
+                <Stack spacing={0.75}>
+                  {summary.activeProjects.map((project) => (
+                    <ProgressRow
+                      key={project.id}
+                      item={project}
+                      title={project.name || "Proyecto sin nombre"}
+                      subtitle={
+                        project.taskTotal
+                          ? `${project.taskTotal - project.taskDone} abiertas · ${project.taskDone} completadas`
+                          : project.client || "Sin tareas todavía"
+                      }
+                      value={
+                        project.taskTotal
+                          ? Math.round((project.taskDone / project.taskTotal) * 100)
+                          : 0
+                      }
+                      color={project.color || theme.palette.primary.main}
+                    />
+                  ))}
+                </Stack>
+              )}
+            </Panel>
+
+            <Panel
+              title="Notas recientes"
+              subtitle="Lo último que anotaste"
+              icon={<NotesRoundedIcon />}
+              onMore={() => go("notas")}
+            >
+              {notes.length === 0 ? (
+                <EmptyRow icon={<NotesRoundedIcon />} text="Todavía no tenés notas." />
+              ) : (
+                <Stack spacing={0.75}>
+                  {notes.slice(0, 3).map((note) => (
+                    <NoteRow key={note.id} note={note} onOpen={() => go("notas")} />
+                  ))}
+                </Stack>
+              )}
+            </Panel>
+          </Grid>
+        </Section>
       </Stack>
     </Box>
   );
 };
 
-const HeaderCard = () => {
-  const theme = useTheme();
+/* ---------- Piezas ---------- */
 
+const sectionTitle = (theme) => ({
+  mb: 0.9,
+  fontSize: "0.7rem",
+  fontWeight: 800,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  color: theme.palette.app.secondary,
+});
+
+function Grid({ columns, children }) {
   return (
-    <Card
-      elevation={0}
+    <Box
       sx={{
-        ...getCardStyles(theme),
-        position: "relative",
-        overflow: "hidden",
-        p: {
-          xs: 2,
-          sm: 2.4,
-          md: 2.8,
-        },
+        display: "grid",
+        gridTemplateColumns: columns,
+        gap: { xs: 1.5, md: 1.75 },
+        alignItems: "stretch",
       }}
     >
-      <Stack direction="row" alignItems="center" spacing={1.6} sx={{ minWidth: 0 }}>
-        <Avatar
-          variant="rounded"
-          sx={{
-            width: { xs: 52, md: 58 },
-            height: { xs: 52, md: 58 },
-            borderRadius: "18px",
-            color: theme.palette.primary.main,
-            backgroundColor: theme.palette.app.primarySoft,
-            border: `1px solid ${theme.palette.app.borderSoft}`,
-            flexShrink: 0,
-          }}
-        >
-          <HomeRoundedIcon sx={{ fontSize: { xs: 27, md: 31 } }} />
-        </Avatar>
-
-        <Box sx={{ minWidth: 0 }}>
-          <Typography
-            sx={{
-              color: theme.palette.app.text,
-              fontWeight: 950,
-              letterSpacing: "-0.6px",
-              fontSize: {
-                xs: "1.55rem",
-                sm: "1.85rem",
-                md: "2.15rem",
-              },
-              lineHeight: 1.05,
-            }}
-          >
-            Inicio
-          </Typography>
-
-          <Typography
-            sx={{
-              mt: 0.8,
-              color: theme.palette.app.secondary,
-              fontSize: {
-                xs: "0.9rem",
-                md: "0.98rem",
-              },
-              lineHeight: 1.65,
-              fontWeight: 600,
-              maxWidth: 720,
-            }}
-          >
-            Un panel rápido para ver el estado general de tus tareas, proyectos y avance del espacio de trabajo.
-          </Typography>
-        </Box>
-      </Stack>
-    </Card>
+      {children}
+    </Box>
   );
-};
+}
 
-const ProjectInProgressCard = ({ task, project }) => {
+function Panel({ title, subtitle, icon, iconColor, onMore, children }) {
   const theme = useTheme();
-
-  const projectColor =
-    task?.projectColor || project?.color || theme.palette.primary.main;
-
-  const logoUrl = task?.projectLogoUrl || project?.logoUrl || appLogoDark;
-
-  const projectName =
-    task?.projectName || project?.name || "Sin proyecto asignado";
-
-  const taskTitle = task?.title || "No hay tareas cargadas";
+  const color = iconColor || theme.palette.primary.main;
 
   return (
     <Card
       elevation={0}
       sx={{
-        ...getCardStyles(theme),
-        p: { xs: 2, md: 2.4 },
+        ...getCardStyles(theme, "18px"),
+        p: { xs: 1.6, md: 1.9 },
         height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        minWidth: 0,
+      }}
+    >
+      <Stack direction="row" alignItems="center" spacing={1.2} sx={{ mb: 1.5 }}>
+        <Box
+          sx={{
+            width: 34,
+            height: 34,
+            flexShrink: 0,
+            borderRadius: "10px",
+            display: "grid",
+            placeItems: "center",
+            color,
+            bgcolor: softTint(theme, color),
+            "& svg": { fontSize: 19 },
+          }}
+        >
+          {icon}
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography
+            noWrap
+            sx={{ color: theme.palette.app.text, fontSize: "0.95rem", fontWeight: 800 }}
+          >
+            {title}
+          </Typography>
+          {subtitle && (
+            <Typography
+              noWrap
+              sx={{ color: theme.palette.app.secondary, fontSize: "0.75rem", fontWeight: 600 }}
+            >
+              {subtitle}
+            </Typography>
+          )}
+        </Box>
+        {onMore && (
+          <Button
+            size="small"
+            endIcon={<ArrowForwardRoundedIcon />}
+            onClick={onMore}
+            sx={{
+              flexShrink: 0,
+              height: 30,
+              px: 1.2,
+              borderRadius: "9px",
+              fontSize: "0.78rem",
+              fontWeight: 750,
+              "& .MuiButton-endIcon": { ml: 0.4, "& svg": { fontSize: 16 } },
+            }}
+          >
+            Ver
+          </Button>
+        )}
+      </Stack>
+      <Box sx={{ flex: 1, minWidth: 0 }}>{children}</Box>
+    </Card>
+  );
+}
+
+function FocusCard({ task, project, next, onToggleItem, onComplete, onGo }) {
+  const theme = useTheme();
+  const color = task?.projectColor || project?.color || theme.palette.primary.main;
+  const checklist = getChecklist(task);
+  const progress = getChecklistProgress(checklist);
+  const pendingItems = checklist.filter((item) => !item.done);
+  const due = task ? getDueInfo(task) : null;
+  const isDark = theme.palette.mode === "dark";
+
+  return (
+    <Card
+      elevation={0}
+      sx={{
+        ...getCardStyles(theme, "20px"),
+        position: "relative",
+        overflow: "hidden",
+        height: "100%",
+        p: { xs: 2, md: 2.5 },
+        borderColor: alpha(color, isDark ? 0.35 : 0.25),
+        backgroundImage: `radial-gradient(520px 260px at 0% 0%, ${alpha(color, isDark ? 0.22 : 0.12)}, transparent 70%)`,
       }}
     >
       <Stack
         direction={{ xs: "column", sm: "row" }}
-        alignItems={{ xs: "stretch", sm: "center" }}
-        spacing={{ xs: 2, md: 2.4 }}
+        spacing={{ xs: 2, sm: 2.5 }}
+        alignItems={{ xs: "flex-start", sm: "stretch" }}
         sx={{ height: "100%" }}
       >
-        <ProjectLogo
-          logoUrl={logoUrl}
-          projectName={projectName}
-          projectColor={projectColor}
-          size={{ xs: 124, md: 154 }}
-        />
-
-        <Box
-          sx={{
-            minWidth: 0,
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-          }}
-        >
-          <Stack
-            direction="row"
-            alignItems="center"
-            spacing={1}
-            sx={{ mb: 1, flexWrap: "wrap", rowGap: 1 }}
-          >
-            <Chip
-              size="small"
-              icon={<RocketLaunchRoundedIcon />}
-              label={task ? "Proyecto en progreso" : "Sin tareas activas"}
-              sx={{
-                height: 28,
-                borderRadius: "999px",
-                color: task ? theme.palette.info.main : theme.palette.app.secondary,
-                backgroundColor: task
-                  ? alpha(theme.palette.info.main, theme.palette.mode === "dark" ? 0.15 : 0.09)
-                  : getSoftBackground(theme),
-                border: `1px solid ${
-                  task
-                    ? alpha(theme.palette.info.main, 0.18)
-                    : theme.palette.app.borderSoft
-                }`,
-                fontWeight: 900,
-                "& .MuiChip-icon": {
-                  color: task ? theme.palette.info.main : theme.palette.app.secondary,
-                },
-              }}
+        {/* Logo grande del proyecto  */}
+        <Box sx={{ flexShrink: 0 }}>
+          {task?.projectId ? (
+            <ProjectAvatar
+              item={{ ...project, ...task }}
+              size={{ xs: 88, md: 120 }}
+              radius="24px"
+              fontSize={44}
+              sx={{ boxShadow: `0 18px 40px ${alpha(color, isDark ? 0.35 : 0.25)}` }}
             />
-          </Stack>
+          ) : (
+            <Box
+              sx={{
+                width: { xs: 88, md: 120 },
+                height: { xs: 88, md: 120 },
+                borderRadius: "24px",
+                display: "grid",
+                placeItems: "center",
+                background: "linear-gradient(145deg, #0f1b33, #060b16)",
+                boxShadow: "0 18px 40px rgba(37,99,235,0.25)",
+              }}
+            >
+              <Box component="img" src={logoIcon} alt="" sx={{ width: "70%" }} />
+            </Box>
+          )}
+        </Box>
 
+        <Stack sx={{ flex: 1, minWidth: 0 }}>
           <Typography
             sx={{
               color: theme.palette.app.text,
-              fontWeight: 950,
-              fontSize: { xs: "1.35rem", md: "1.65rem" },
-              letterSpacing: "-0.45px",
-              lineHeight: 1.12,
+              fontSize: { xs: "1.25rem", md: "1.45rem" },
+              fontWeight: 850,
+              letterSpacing: "-0.4px",
+              lineHeight: 1.2,
               display: "-webkit-box",
               WebkitLineClamp: 2,
               WebkitBoxOrient: "vertical",
               overflow: "hidden",
             }}
           >
-            {taskTitle}
+            {task?.title || "Todo al día"}
           </Typography>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.4, minWidth: 0 }}>
+            <Typography
+              noWrap
+              sx={{ color: theme.palette.app.secondary, fontSize: "0.86rem", fontWeight: 650 }}
+            >
+              {task
+                ? [task.projectName || "Tarea personal", project?.client]
+                    .filter(Boolean)
+                    .join(" · ")
+                : "Cuando tengas tareas abiertas, la primera de tu tablero aparece acá."}
+            </Typography>
+            {due && (
+              <MetaPill
+                icon={<EventRoundedIcon />}
+                label={due.label}
+                color={getDueColor(theme, due.tone)}
+              />
+            )}
+          </Stack>
 
-          <Typography
-            noWrap
-            sx={{
-              mt: 0.8,
-              color: theme.palette.app.secondary,
-              fontSize: { xs: "0.9rem", md: "0.96rem" },
-              fontWeight: 700,
-              lineHeight: 1.55,
-            }}
+          {(task?.description || project?.description) && (
+            <Typography
+              sx={{
+                mt: 1.1,
+                color: theme.palette.app.secondary,
+                fontSize: "0.86rem",
+                fontWeight: 500,
+                lineHeight: 1.55,
+                display: "-webkit-box",
+                WebkitLineClamp: progress.total ? 1 : 3,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+                opacity: task?.description ? 1 : 0.8,
+              }}
+            >
+              {task?.description || project.description}
+            </Typography>
+          )}
+
+          {progress.total > 0 && (
+            <Box sx={{ mt: 1.5 }}>
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <LinearProgress
+                  variant="determinate"
+                  value={progress.percent}
+                  sx={{
+                    flex: 1,
+                    height: 7,
+                    borderRadius: 999,
+                    bgcolor: alpha(isDark ? "#FFFFFF" : "#0F172A", 0.08),
+                    "& .MuiLinearProgress-bar": { borderRadius: 999, bgcolor: color },
+                  }}
+                />
+                <Typography
+                  sx={{ fontSize: "0.78rem", fontWeight: 800, color: theme.palette.app.text }}
+                >
+                  {progress.done}/{progress.total}
+                </Typography>
+              </Stack>
+              {pendingItems.length > 0 && (
+                <Box sx={{ mt: 0.75, ml: -0.5 }}>
+                  <ChecklistItems
+                    checklist={pendingItems}
+                    onToggle={onToggleItem}
+                    limit={3}
+                    dense
+                  />
+                </Box>
+              )}
+            </Box>
+          )}
+
+          <Box sx={{ flex: 1, minHeight: 12 }} />
+
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            alignItems={{ xs: "stretch", sm: "center" }}
+            spacing={1}
+            sx={{ pt: 1.5, borderTop: `1px solid ${alpha(color, 0.15)}` }}
           >
-            {projectName}
-          </Typography>
-        </Box>
+            <Stack direction="row" alignItems="center" spacing={0.9} sx={{ flex: 1, minWidth: 0 }}>
+              {next && (
+                <>
+                  <Typography
+                    sx={{
+                      flexShrink: 0,
+                      fontSize: "0.7rem",
+                      fontWeight: 800,
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      color: theme.palette.app.secondary,
+                    }}
+                  >
+                    Siguiente
+                  </Typography>
+                  <Tooltip title={next.projectName || "Tarea personal"} arrow>
+                    <Box sx={{ display: "flex", flexShrink: 0 }}>
+                      <ProjectAvatar
+                        item={next.projectId ? next : null}
+                        size={24}
+                        fontSize={11}
+                        sx={{
+                          border: "none",
+                          boxShadow: `0 4px 10px ${alpha(next.projectColor || theme.palette.primary.main, 0.25)}`,
+                        }}
+                      />
+                    </Box>
+                  </Tooltip>
+                  <Typography
+                    noWrap
+                    sx={{
+                      minWidth: 0,
+                      fontSize: "0.84rem",
+                      fontWeight: 750,
+                      color: theme.palette.app.text,
+                    }}
+                  >
+                    {next.title}
+                  </Typography>
+                </>
+              )}
+            </Stack>
+            <Stack direction="row" spacing={1}>
+              {task && (
+                <Button
+                  onClick={onComplete}
+                  startIcon={<TaskAltRoundedIcon />}
+                  sx={{
+                    height: 36,
+                    px: 1.5,
+                    borderRadius: "10px",
+                    fontWeight: 750,
+                    fontSize: "0.8rem",
+                    color: theme.palette.success.main,
+                    bgcolor: softTint(theme, theme.palette.success.main, 0.1, 0.16),
+                    "&:hover": { bgcolor: softTint(theme, theme.palette.success.main, 0.16, 0.22) },
+                  }}
+                >
+                  Completar
+                </Button>
+              )}
+              <Button
+                variant="contained"
+                disableElevation
+                endIcon={<ArrowForwardRoundedIcon />}
+                onClick={onGo}
+                sx={{
+                  height: 36,
+                  px: 1.6,
+                  borderRadius: "10px",
+                  fontWeight: 800,
+                  fontSize: "0.8rem",
+                }}
+              >
+                Ir a tareas
+              </Button>
+            </Stack>
+          </Stack>
+        </Stack>
       </Stack>
     </Card>
   );
-};
+}
 
-const ProjectLogo = ({ logoUrl, projectName, projectColor, size }) => {
+function MiniStat({ label, value, color, icon, onClick }) {
   const theme = useTheme();
-  const letter = projectName?.charAt(0)?.toUpperCase();
+
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={onClick}
+      sx={{
+        all: "unset",
+        boxSizing: "border-box",
+        p: 1.2,
+        borderRadius: "12px",
+        cursor: "pointer",
+        bgcolor: getSoftBackground(theme),
+        border: `1px solid ${theme.palette.app.borderSoft}`,
+        transition: "border-color 0.16s ease",
+        "&:hover": { borderColor: alpha(color, 0.4) },
+      }}
+    >
+      <Stack direction="row" alignItems="center" justifyContent="space-between">
+        <Typography
+          sx={{
+            fontSize: "1.35rem",
+            fontWeight: 850,
+            lineHeight: 1,
+            color: theme.palette.app.text,
+          }}
+        >
+          {value}
+        </Typography>
+        <Box sx={{ color, display: "flex", "& svg": { fontSize: 18 } }}>{icon}</Box>
+      </Stack>
+      <Typography
+        noWrap
+        sx={{ mt: 0.6, fontSize: "0.74rem", fontWeight: 650, color: theme.palette.app.secondary }}
+      >
+        {label}
+      </Typography>
+    </Box>
+  );
+}
+
+function QuickLink({ label, icon, count, onClick }) {
+  const theme = useTheme();
+
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={onClick}
+      sx={{
+        all: "unset",
+        boxSizing: "border-box",
+        minWidth: 0,
+        display: "flex",
+        alignItems: "center",
+        gap: 0.75,
+        px: 1,
+        py: 0.85,
+        borderRadius: "10px",
+        cursor: "pointer",
+        border: `1px solid ${theme.palette.app.borderSoft}`,
+        transition: "all 0.16s ease",
+        "&:hover": {
+          bgcolor: theme.palette.app.primarySoft,
+          borderColor: alpha(theme.palette.primary.main, 0.3),
+          color: theme.palette.primary.main,
+        },
+      }}
+    >
+      <Box sx={{ display: "flex", color: theme.palette.primary.main, "& svg": { fontSize: 16 } }}>
+        {icon}
+      </Box>
+      <Typography noWrap sx={{ flex: 1, fontSize: "0.76rem", fontWeight: 700, color: "inherit" }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontSize: "0.72rem", fontWeight: 800, color: theme.palette.app.secondary }}>
+        {count}
+      </Typography>
+    </Box>
+  );
+}
+
+function TaskRow({ task, delay, onComplete, onOpen }) {
+  const theme = useTheme();
+  const due = getDueInfo(task);
+  const priority = PRIORITY[task.priority];
+  const { total, done } = getChecklistProgress(getChecklist(task));
+
+  return (
+    <Stack
+      direction="row"
+      alignItems="center"
+      spacing={1.1}
+      onClick={onOpen}
+      sx={{
+        ...getSoftFadeSx(delay),
+        p: 1,
+        pl: 1.2,
+        borderRadius: "12px",
+        cursor: "pointer",
+        bgcolor: getSoftBackground(theme),
+        border: `1px solid ${theme.palette.app.borderSoft}`,
+        borderLeft: `3px solid ${priority ? priority.color(theme) : theme.palette.app.borderSoft}`,
+        transition: "border-color 0.16s ease",
+        "&:hover": { borderColor: alpha(theme.palette.primary.main, 0.35) },
+      }}
+    >
+      <DoneToggle done={false} onToggle={onComplete} />
+      <ProjectAvatar
+        item={task.projectId ? task : null}
+        size={26}
+        fontSize={12}
+        sx={{ border: "none" }}
+      />
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          noWrap
+          sx={{ fontSize: "0.86rem", fontWeight: 750, color: theme.palette.app.text }}
+        >
+          {task.title || "Tarea sin título"}
+        </Typography>
+        <Typography
+          noWrap
+          sx={{ fontSize: "0.72rem", fontWeight: 600, color: theme.palette.app.secondary }}
+        >
+          {[
+            task.projectName || "Personal",
+            getStatusLabel(task.status),
+            total && `${done}/${total} ítems`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </Typography>
+      </Box>
+      {due && (
+        <Box sx={{ display: { xs: "none", sm: "block" } }}>
+          <MetaPill
+            icon={<EventRoundedIcon />}
+            label={due.label}
+            color={getDueColor(theme, due.tone)}
+          />
+        </Box>
+      )}
+    </Stack>
+  );
+}
+
+function PaymentRow({ item }) {
+  const theme = useTheme();
+  const date = item.date
+    .toLocaleDateString("es-AR", { day: "numeric", month: "short" })
+    .replace(" de ", " ")
+    .replace(".", "");
+
+  return (
+    <Stack
+      direction="row"
+      alignItems="center"
+      spacing={1}
+      sx={{ px: 1, py: 0.75, borderRadius: "10px", bgcolor: getSoftBackground(theme) }}
+    >
+      <ProjectAvatar item={item} size={26} fontSize={12} sx={{ border: "none" }} />
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          noWrap
+          sx={{ fontSize: "0.8rem", fontWeight: 750, color: theme.palette.app.text }}
+        >
+          {item.projectName || "Proyecto sin nombre"}
+        </Typography>
+        <Typography
+          noWrap
+          sx={{ fontSize: "0.7rem", fontWeight: 600, color: theme.palette.app.secondary }}
+        >
+          {[date, item.method].filter(Boolean).join(" · ")}
+        </Typography>
+      </Box>
+      <Typography sx={{ fontSize: "0.82rem", fontWeight: 850, color: theme.palette.success.main }}>
+        +{formatMoney(item.amount, item.currency)}
+      </Typography>
+    </Stack>
+  );
+}
+
+function ProgressRow({ item, title, subtitle, value, color }) {
+  const theme = useTheme();
 
   return (
     <Box
       sx={{
-        width: size,
-        height: size,
-        borderRadius: "20px",
-        border: `1px solid ${getProjectLogoBorder(theme, projectColor)}`,
-        backgroundColor: getProjectLogoBackground(theme, projectColor),
-        overflow: "hidden",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-        position: "relative",
+        p: 1,
+        borderRadius: "12px",
+        bgcolor: getSoftBackground(theme),
+        border: `1px solid ${theme.palette.app.borderSoft}`,
       }}
     >
-      {logoUrl ? (
-        <Box
-          component="img"
-          src={logoUrl}
-          alt={projectName || "Proyecto"}
-          sx={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-          }}
-        />
-      ) : letter ? (
+      <Stack direction="row" alignItems="center" spacing={1.1}>
+        <ProjectAvatar item={item} size={30} fontSize={13} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography
+            noWrap
+            sx={{ fontSize: "0.84rem", fontWeight: 750, color: theme.palette.app.text }}
+          >
+            {title}
+          </Typography>
+          <Typography
+            noWrap
+            sx={{ fontSize: "0.72rem", fontWeight: 600, color: theme.palette.app.secondary }}
+          >
+            {subtitle}
+          </Typography>
+        </Box>
+        <Typography sx={{ fontSize: "0.76rem", fontWeight: 800, color: theme.palette.app.text }}>
+          {value}%
+        </Typography>
+      </Stack>
+      <LinearProgress
+        variant="determinate"
+        value={value}
+        sx={{
+          mt: 0.9,
+          height: 4,
+          borderRadius: 999,
+          bgcolor: alpha(theme.palette.mode === "dark" ? "#FFFFFF" : "#0F172A", 0.07),
+          "& .MuiLinearProgress-bar": { borderRadius: 999, bgcolor: color },
+        }}
+      />
+    </Box>
+  );
+}
+
+function NoteRow({ note, onOpen }) {
+  const theme = useTheme();
+  const color = note.projectColor || "#94A3B8";
+
+  return (
+    <Box
+      onClick={onOpen}
+      sx={{
+        p: 1.1,
+        pl: 1.3,
+        borderRadius: "12px",
+        cursor: "pointer",
+        bgcolor: getSoftBackground(theme),
+        border: `1px solid ${theme.palette.app.borderSoft}`,
+        borderLeft: `3px solid ${color}`,
+        transition: "border-color 0.16s ease",
+        "&:hover": { borderColor: alpha(theme.palette.primary.main, 0.35) },
+      }}
+    >
+      <Stack direction="row" alignItems="center" spacing={1}>
+        <Typography
+          noWrap
+          sx={{ flex: 1, fontSize: "0.86rem", fontWeight: 750, color: theme.palette.app.text }}
+        >
+          {note.title || "Sin título"}
+        </Typography>
+        <Typography
+          noWrap
+          sx={{ fontSize: "0.7rem", fontWeight: 650, color: theme.palette.app.secondary }}
+        >
+          {note.projectName || "Personal"}
+        </Typography>
+      </Stack>
+      {note.content && (
         <Typography
           sx={{
-            color: projectColor,
-            fontSize: { xs: "1.85rem", md: "2.1rem" },
-            fontWeight: 950,
-            lineHeight: 1,
+            mt: 0.3,
+            fontSize: "0.76rem",
+            fontWeight: 500,
+            lineHeight: 1.45,
+            color: theme.palette.app.secondary,
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            whiteSpace: "pre-wrap",
           }}
         >
-          {letter}
+          {note.content}
         </Typography>
-      ) : (
-        <FolderRoundedIcon
-          sx={{
-            color: projectColor,
-            fontSize: { xs: 30, md: 34 },
-          }}
-        />
       )}
     </Box>
   );
-};
+}
 
-const OverviewGrid = ({ stats }) => {
+function EmptyRow({ text, icon }) {
   const theme = useTheme();
 
-  const items = [
-    {
-      title: "Activas",
-      value: stats.activeTasks,
-      icon: <FormatListBulletedRoundedIcon />,
-      color: theme.palette.primary.main,
-      helper: "Pendientes + en progreso",
-    },
-    {
-      title: "En progreso",
-      value: stats.inProgressTasks,
-      icon: <AccessTimeRoundedIcon />,
-      color: theme.palette.info.main,
-      helper: "En movimiento",
-    },
-    {
-      title: "Pendientes",
-      value: stats.pendingTasks,
-      icon: <PendingActionsRoundedIcon />,
-      color: theme.palette.warning.main,
-      helper: "Esperando acción",
-    },
-    {
-      title: "Completadas",
-      value: stats.completedTasks,
-      icon: <CheckCircleRoundedIcon />,
-      color: theme.palette.success.main,
-      helper: "Finalizadas",
-    },
-  ];
-
   return (
+    <Box
+      sx={{
+        height: "100%",
+        minHeight: 110,
+        p: 2,
+        borderRadius: "14px",
+        border: `1.5px dashed ${theme.palette.app.borderSoft}`,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        textAlign: "center",
+        color: theme.palette.app.secondary,
+        "& svg": { fontSize: 26, mb: 0.6, opacity: 0.6 },
+      }}
+    >
+      {icon}
+      <Typography sx={{ fontSize: "0.82rem", fontWeight: 600 }}>{text}</Typography>
+    </Box>
+  );
+}
+
+function HomeSkeleton() {
+  const theme = useTheme();
+  const block = (height, delay) => (
+    <Skeleton
+      variant="rounded"
+      height={height}
+      sx={{
+        ...getSoftFadeSx(delay),
+        borderRadius: "18px",
+        backgroundColor: alpha(theme.palette.mode === "dark" ? "#FFFFFF" : "#0F172A", 0.08),
+      }}
+    />
+  );
+  const row = (heights, delay) => (
     <Box
       sx={{
         display: "grid",
-        gridTemplateColumns: {
-          xs: "1fr 1fr",
-          md: "repeat(4, 1fr)",
-        },
-        gap: { xs: 1.2, md: 1.6 },
+        gridTemplateColumns: { xs: "1fr", lg: "1.65fr 1fr" },
+        gap: { xs: 1.5, md: 1.75 },
       }}
     >
-      {items.map((item, index) => (
-        <Card
-          key={item.title}
-          elevation={0}
-          sx={{
-            ...getCardStyles(theme),
-            ...getSoftFadeSx(index * 45),
-            minHeight: { xs: 92, md: 104 },
-            p: { xs: 1.55, md: 1.8 },
-            borderRadius: "20px",
-            transition: "all 0.18s ease",
-            "&:hover": {
-              transform: "translateY(-2px)",
-              borderColor: alpha(item.color, 0.28),
-            },
-          }}
-        >
-          <Stack direction="row" alignItems="center" spacing={1.25} sx={{ height: "100%" }}>
-            <Avatar
-              variant="rounded"
-              sx={{
-                width: { xs: 40, md: 46 },
-                height: { xs: 40, md: 46 },
-                borderRadius: "15px",
-                color: item.color,
-                backgroundColor: alpha(
-                  item.color,
-                  theme.palette.mode === "dark" ? 0.16 : 0.1
-                ),
-              }}
-            >
-              {item.icon}
-            </Avatar>
-
-            <Box sx={{ minWidth: 0 }}>
-              <Typography
-                sx={{
-                  color: theme.palette.app.text,
-                  fontWeight: 950,
-                  fontSize: { xs: "1.45rem", md: "1.78rem" },
-                  lineHeight: 1,
-                  letterSpacing: "-0.6px",
-                }}
-              >
-                {item.value}
-              </Typography>
-
-              <Typography
-                noWrap
-                sx={{
-                  mt: 0.55,
-                  color: theme.palette.app.secondary,
-                  fontSize: "0.78rem",
-                  fontWeight: 850,
-                }}
-              >
-                {item.title}
-              </Typography>
-
-              <Typography
-                noWrap
-                sx={{
-                  mt: 0.25,
-                  color: theme.palette.app.muted,
-                  fontSize: "0.72rem",
-                  fontWeight: 650,
-                  display: { xs: "none", sm: "block" },
-                }}
-              >
-                {item.helper}
-              </Typography>
-            </Box>
-          </Stack>
-        </Card>
+      {heights.map((h, i) => (
+        <Box key={i}>{block(h, delay + i * 45)}</Box>
       ))}
     </Box>
   );
-};
-
-const WorkspaceSummaryCard = ({ stats, notes }) => {
-  const theme = useTheme();
 
   return (
-    <Card
-      elevation={0}
-      sx={{
-        ...getCardStyles(theme),
-        p: { xs: 2, md: 2.4 },
-        height: "100%",
-      }}
-    >
-      <Stack spacing={2.1} sx={{ height: "100%" }}>
-        <Box sx={getFadeInSx(40)}>
-          <Stack direction="row" alignItems="center" spacing={1.4} sx={{ mb: 1.6 }}>
-            <Avatar
-              variant="rounded"
-              sx={{
-                width: 46,
-                height: 46,
-                borderRadius: "16px",
-                color: theme.palette.warning.main,
-                backgroundColor: alpha(theme.palette.warning.main, 0.12),
-                flexShrink: 0,
-              }}
-            >
-              <PaymentsRoundedIcon />
-            </Avatar>
-
-            <Box sx={{ minWidth: 0 }}>
-              <Typography
-                sx={{
-                  color: theme.palette.app.text,
-                  fontWeight: 900,
-                  fontSize: "1.05rem",
-                }}
-              >
-                Resumen de cobros
-              </Typography>
-
-              <Typography
-                noWrap
-                sx={{
-                  mt: 0.25,
-                  color: theme.palette.app.secondary,
-                  fontSize: "0.86rem",
-                  fontWeight: 600,
-                }}
-              >
-                Estado pendiente de tus proyectos facturados.
-              </Typography>
-            </Box>
-          </Stack>
-
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
-              gap: 1.2,
-            }}
-          >
-            <PaymentMiniStat
-              title="Sin cobrar"
-              value={stats.unpaidPayments}
-              helper="Pagos todavía pendientes"
-              icon={<PaymentsRoundedIcon />}
-              color={theme.palette.warning.main}
-              delay={90}
-            />
-
-            <PaymentMiniStat
-              title="Parciales"
-              value={stats.partialPayments}
-              helper="Cobros iniciados"
-              icon={<AccessTimeRoundedIcon />}
-              color={theme.palette.info.main}
-              delay={135}
-            />
-          </Box>
-        </Box>
-
-        <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
-
-        <Box sx={{ ...getFadeInSx(110), flex: 1, minHeight: 0 }}>
-          <Stack direction="row" alignItems="center" spacing={1.4} sx={{ mb: 1.6 }}>
-            <Avatar
-              variant="rounded"
-              sx={{
-                width: 46,
-                height: 46,
-                borderRadius: "16px",
-                color: theme.palette.primary.main,
-                backgroundColor: theme.palette.app.primarySoft,
-                flexShrink: 0,
-              }}
-            >
-              <NotesRoundedIcon />
-            </Avatar>
-
-            <Box sx={{ minWidth: 0 }}>
-              <Typography
-                sx={{
-                  color: theme.palette.app.text,
-                  fontWeight: 900,
-                  fontSize: "1.05rem",
-                }}
-              >
-                Resumen de notas
-              </Typography>
-
-              <Typography
-                noWrap
-                sx={{
-                  mt: 0.25,
-                  color: theme.palette.app.secondary,
-                  fontSize: "0.86rem",
-                  fontWeight: 600,
-                }}
-              >
-                Tus notas recientes vinculadas a proyectos.
-              </Typography>
-            </Box>
-          </Stack>
-
-          {notes.length === 0 ? (
-            <EmptyCard
-              text="Aún no tienes notas guardadas."
-              icon={<NotesRoundedIcon />}
-              color={theme.palette.primary.main}
-            />
-          ) : (
-            <Stack spacing={1.1}>
-              {notes.map((note, index) => (
-                <NotePreview key={note.id} note={note} delay={index * 55} />
-              ))}
-            </Stack>
-          )}
-        </Box>
-      </Stack>
-    </Card>
-  );
-};
-
-const ProjectsResume = ({ activeProjects, finishedProjects, totalProjects }) => {
-  const theme = useTheme();
-
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        ...getCardStyles(theme),
-        p: { xs: 2, md: 2.4 },
-        height: "100%",
-      }}
-    >
-      <Stack spacing={2} sx={{ height: "100%" }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
-          <Stack direction="row" alignItems="center" spacing={1.4} sx={{ minWidth: 0 }}>
-            <Avatar
-              variant="rounded"
-              sx={{
-                width: 46,
-                height: 46,
-                borderRadius: "16px",
-                color: theme.palette.primary.main,
-                backgroundColor: theme.palette.app.primarySoft,
-                flexShrink: 0,
-              }}
-            >
-              <FolderRoundedIcon />
-            </Avatar>
-
-            <Box sx={{ minWidth: 0 }}>
-              <Typography
-                sx={{
-                  color: theme.palette.app.text,
-                  fontWeight: 900,
-                  fontSize: "1.05rem",
-                }}
-              >
-                Proyectos
-              </Typography>
-
-              <Typography
-                noWrap
-                sx={{
-                  mt: 0.25,
-                  color: theme.palette.app.secondary,
-                  fontSize: "0.86rem",
-                  fontWeight: 600,
-                }}
-              >
-                Estado general del espacio de trabajo.
-              </Typography>
-            </Box>
-          </Stack>
-        </Stack>
-
-        <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
-
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
-            gap: 1.2,
-            mt: "auto",
-          }}
-        >
-          <ProjectMiniStat
-            title="Total"
-            value={totalProjects}
-            icon={<FolderRoundedIcon />}
-            color={theme.palette.primary.main}
-            delay={40}
-          />
-
-          <ProjectMiniStat
-            title="Activos"
-            value={activeProjects}
-            icon={<FolderOpenRoundedIcon />}
-            color={theme.palette.info.main}
-            delay={85}
-          />
-
-          <ProjectMiniStat
-            title="Finalizados"
-            value={finishedProjects}
-            icon={<TaskAltRoundedIcon />}
-            color={theme.palette.success.main}
-            delay={130}
-          />
-        </Box>
-      </Stack>
-    </Card>
-  );
-};
-
-const ProjectMiniStat = ({ title, value, icon, color, delay = 0 }) => {
-  const theme = useTheme();
-
-  return (
-    <Box
-      sx={{
-        ...getSoftFadeSx(delay),
-        borderRadius: "18px",
-        p: 1.35,
-        backgroundColor: getSoftBackground(theme),
-        border: `1px solid ${theme.palette.app.borderSoft}`,
-        minHeight: 74,
-        display: "flex",
-        alignItems: "center",
-      }}
-    >
-      <Stack direction="row" alignItems="center" spacing={1.15} sx={{ width: "100%" }}>
-        <Avatar
-          variant="rounded"
-          sx={{
-            width: 39,
-            height: 39,
-            borderRadius: "14px",
-            color,
-            backgroundColor: alpha(
-              color,
-              theme.palette.mode === "dark" ? 0.16 : 0.1
-            ),
-            flexShrink: 0,
-          }}
-        >
-          {icon}
-        </Avatar>
-
-        <Box sx={{ minWidth: 0 }}>
-          <Typography
-            sx={{
-              color: theme.palette.app.text,
-              fontSize: { xs: "1.35rem", md: "1.55rem" },
-              lineHeight: 1,
-              fontWeight: 950,
-              letterSpacing: "-0.6px",
-            }}
-          >
-            {value}
-          </Typography>
-
-          <Typography
-            noWrap
-            sx={{
-              mt: 0.45,
-              color: theme.palette.app.secondary,
-              fontSize: "0.76rem",
-              fontWeight: 850,
-            }}
-          >
-            {title}
-          </Typography>
-        </Box>
-      </Stack>
-    </Box>
-  );
-};
-
-const PaymentMiniStat = ({ title, value, helper, icon, color, delay = 0 }) => {
-  const theme = useTheme();
-
-  return (
-    <Box
-      sx={{
-        ...getSoftFadeSx(delay),
-        borderRadius: "18px",
-        p: 1.35,
-        backgroundColor: getSoftBackground(theme),
-        border: `1px solid ${theme.palette.app.borderSoft}`,
-        minHeight: 78,
-        display: "flex",
-        alignItems: "center",
-      }}
-    >
-      <Stack direction="row" alignItems="center" spacing={1.15} sx={{ width: "100%" }}>
-        <Avatar
-          variant="rounded"
-          sx={{
-            width: 39,
-            height: 39,
-            borderRadius: "14px",
-            color,
-            backgroundColor: alpha(
-              color,
-              theme.palette.mode === "dark" ? 0.16 : 0.1
-            ),
-            flexShrink: 0,
-          }}
-        >
-          {icon}
-        </Avatar>
-
-        <Box sx={{ minWidth: 0 }}>
-          <Typography
-            sx={{
-              color: theme.palette.app.text,
-              fontSize: { xs: "1.28rem", md: "1.45rem" },
-              lineHeight: 1,
-              fontWeight: 950,
-              letterSpacing: "-0.6px",
-            }}
-          >
-            {value}
-          </Typography>
-
-          <Typography
-            noWrap
-            sx={{
-              mt: 0.4,
-              color: theme.palette.app.secondary,
-              fontSize: "0.76rem",
-              fontWeight: 850,
-            }}
-          >
-            {title}
-          </Typography>
-
-          <Typography
-            noWrap
-            sx={{
-              mt: 0.2,
-              color: theme.palette.app.muted,
-              fontSize: "0.7rem",
-              fontWeight: 650,
-            }}
-          >
-            {helper}
-          </Typography>
-        </Box>
-      </Stack>
-    </Box>
-  );
-};
-
-const TaskSection = ({ title, subtitle, tasks, icon, color }) => {
-  const theme = useTheme();
-
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        ...getCardStyles(theme),
-        overflow: "hidden",
-      }}
-    >
-      <Box sx={{ p: { xs: 2, md: 2.4 }, pb: 1.6 }}>
-        <Stack
-          direction="row"
-          alignItems="center"
-          justifyContent="space-between"
-          spacing={2}
-        >
-          <Stack direction="row" alignItems="center" spacing={1.4}>
-            <Avatar
-              variant="rounded"
-              sx={{
-                width: 45,
-                height: 45,
-                borderRadius: "16px",
-                color,
-                backgroundColor: alpha(
-                  color,
-                  theme.palette.mode === "dark" ? 0.16 : 0.1
-                ),
-              }}
-            >
-              {icon}
-            </Avatar>
-
-            <Box>
-              <Typography
-                sx={{
-                  color: theme.palette.app.text,
-                  fontSize: "1.05rem",
-                  fontWeight: 900,
-                }}
-              >
-                {title}
-              </Typography>
-
-              <Typography
-                sx={{
-                  mt: 0.25,
-                  color: theme.palette.app.secondary,
-                  fontSize: "0.84rem",
-                  fontWeight: 600,
-                }}
-              >
-                {subtitle}
-              </Typography>
-            </Box>
-          </Stack>
-        </Stack>
-      </Box>
-
-      <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
-
-      <Box sx={{ p: { xs: 1.2, md: 1.5 } }}>
-        {tasks.length === 0 ? (
-          <EmptyCard
-            text="No hay tareas para mostrar."
-            icon={<TaskAltRoundedIcon />}
-            color={color}
-          />
-        ) : (
-          <Stack spacing={1.1}>
-            {tasks.map((task, index) => (
-              <TaskPreview key={task.id} task={task} delay={index * 55} />
-            ))}
-          </Stack>
-        )}
-      </Box>
-    </Card>
-  );
-};
-
-const EmptyCard = ({ text, icon, color }) => {
-  const theme = useTheme();
-
-  return (
-    <Box
-      sx={{
-        ...getSoftFadeSx(40),
-        borderRadius: "18px",
-        border: `1px dashed ${theme.palette.app.borderSoft}`,
-        backgroundColor:
-          theme.palette.mode === "dark"
-            ? alpha("#FFFFFF", 0.02)
-            : alpha("#0F172A", 0.018),
-        p: { xs: 1.8, md: 2.1 },
-      }}
-    >
-      <Stack direction="row" alignItems="center" spacing={1.4}>
-        <Avatar
-          variant="rounded"
-          sx={{
-            width: 44,
-            height: 44,
-            borderRadius: "16px",
-            backgroundColor: alpha(
-              color,
-              theme.palette.mode === "dark" ? 0.16 : 0.1
-            ),
-            color,
-          }}
-        >
-          {icon}
-        </Avatar>
-
-        <Typography
-          sx={{
-            color: theme.palette.app.secondary,
-            fontSize: "0.9rem",
-            fontWeight: 700,
-          }}
-        >
-          {text}
-        </Typography>
-      </Stack>
-    </Box>
-  );
-};
-
-const TaskPreview = ({ task, delay = 0 }) => {
-  const theme = useTheme();
-
-  const statusColor = getStatusColor(theme, task.status);
-  const projectColor = task.projectColor || theme.palette.primary.main;
-  const logoUrl = task.projectLogoUrl;
-  const projectLetter = task.projectName?.charAt(0)?.toUpperCase();
-
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        ...getSoftFadeSx(delay),
-        borderRadius: "18px",
-        border: `1px solid ${theme.palette.app.borderSoft}`,
-        backgroundColor:
-          theme.palette.mode === "dark"
-            ? alpha("#FFFFFF", 0.025)
-            : alpha("#FFFFFF", 0.8),
-        boxShadow: "none",
-        transition: "all 0.18s ease",
-        "&:hover": {
-          transform: "translateY(-1px)",
-          borderColor: alpha(statusColor, 0.28),
-          backgroundColor:
-            theme.palette.mode === "dark" ? alpha("#FFFFFF", 0.04) : "#FFFFFF",
-        },
-      }}
-    >
-      <Stack
-        direction="row"
-        alignItems="center"
-        spacing={1.4}
-        sx={{
-          minHeight: { xs: 74, md: 82 },
-          p: { xs: 1.35, md: 1.55 },
-        }}
-      >
-        <Box
-          sx={{
-            width: { xs: 46, md: 52 },
-            height: { xs: 46, md: 52 },
-            borderRadius: "16px",
-            border: `1px solid ${alpha(projectColor, 0.22)}`,
-            backgroundColor:
-              theme.palette.mode === "dark"
-                ? alpha("#FFFFFF", 0.92)
-                : alpha(projectColor, 0.08),
-            overflow: "hidden",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          {logoUrl ? (
-            <Box
-              component="img"
-              src={logoUrl}
-              alt={task.projectName || "Proyecto"}
-              sx={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-              }}
-            />
-          ) : projectLetter ? (
-            <Typography
-              sx={{
-                color: projectColor,
-                fontSize: "1.25rem",
-                fontWeight: 950,
-              }}
-            >
-              {projectLetter}
-            </Typography>
-          ) : (
-            <FolderRoundedIcon
-              sx={{
-                color: projectColor,
-                fontSize: 27,
-              }}
-            />
-          )}
-        </Box>
-
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography
-            noWrap
-            sx={{
-              color: theme.palette.app.text,
-              fontWeight: 900,
-              fontSize: { xs: "0.94rem", md: "1rem" },
-              letterSpacing: "-0.15px",
-            }}
-          >
-            {task.title || "Tarea sin título"}
-          </Typography>
-
-          <Stack
-            direction="row"
-            alignItems="center"
-            spacing={0.7}
-            sx={{ mt: 0.45, minWidth: 0 }}
-          >
-            <FolderRoundedIcon
-              sx={{
-                fontSize: 15,
-                color: theme.palette.app.secondary,
-                flexShrink: 0,
-              }}
-            />
-
-            <Typography
-              noWrap
-              sx={{
-                color: theme.palette.app.secondary,
-                fontSize: "0.82rem",
-                fontWeight: 650,
-                minWidth: 0,
-              }}
-            >
-              {task.projectName || "Tarea personal"}
-            </Typography>
-          </Stack>
-        </Box>
-
-        <Chip
-          icon={getStatusIcon(task.status)}
-          label={getStatusLabel(task.status)}
-          size="small"
-          sx={{
-            display: { xs: "none", sm: "inline-flex" },
-            height: 31,
-            borderRadius: "999px",
-            color: statusColor,
-            backgroundColor: alpha(
-              statusColor,
-              theme.palette.mode === "dark" ? 0.15 : 0.09
-            ),
-            border: `1px solid ${alpha(statusColor, 0.18)}`,
-            fontWeight: 900,
-            "& .MuiChip-icon": {
-              color: statusColor,
-            },
-          }}
-        />
-
-        <Box
-          sx={{
-            display: { xs: "flex", sm: "none" },
-            width: 11,
-            height: 11,
-            borderRadius: "999px",
-            backgroundColor: statusColor,
-            boxShadow: `0 0 0 5px ${alpha(statusColor, 0.12)}`,
-            flexShrink: 0,
-          }}
-        />
-      </Stack>
-    </Card>
-  );
-};
-
-const NotePreview = ({ note, delay = 0 }) => {
-  const theme = useTheme();
-
-  const projectColor = note.projectColor || theme.palette.primary.main;
-  const logoUrl = note.projectLogoUrl;
-  const projectLetter = note.projectName?.charAt(0)?.toUpperCase();
-
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        ...getSoftFadeSx(delay),
-        borderRadius: "18px",
-        border: `1px solid ${theme.palette.app.borderSoft}`,
-        backgroundColor:
-          theme.palette.mode === "dark"
-            ? alpha("#FFFFFF", 0.025)
-            : alpha("#FFFFFF", 0.8),
-        boxShadow: "none",
-        transition: "all 0.18s ease",
-        "&:hover": {
-          transform: "translateY(-1px)",
-          borderColor: alpha(projectColor, 0.28),
-          backgroundColor:
-            theme.palette.mode === "dark" ? alpha("#FFFFFF", 0.04) : "#FFFFFF",
-        },
-      }}
-    >
-      <Stack
-        direction="row"
-        alignItems="center"
-        spacing={1.4}
-        sx={{
-          minHeight: { xs: 74, md: 82 },
-          p: { xs: 1.35, md: 1.55 },
-        }}
-      >
-        <Box
-          sx={{
-            width: { xs: 46, md: 52 },
-            height: { xs: 46, md: 52 },
-            borderRadius: "16px",
-            border: `1px solid ${alpha(projectColor, 0.22)}`,
-            backgroundColor:
-              theme.palette.mode === "dark"
-                ? alpha("#FFFFFF", 0.92)
-                : alpha(projectColor, 0.08),
-            overflow: "hidden",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          {logoUrl ? (
-            <Box
-              component="img"
-              src={logoUrl}
-              alt={note.projectName || "Proyecto"}
-              sx={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-              }}
-            />
-          ) : projectLetter ? (
-            <Typography
-              sx={{
-                color: projectColor,
-                fontSize: "1.25rem",
-                fontWeight: 950,
-              }}
-            >
-              {projectLetter}
-            </Typography>
-          ) : (
-            <NotesRoundedIcon
-              sx={{
-                color: projectColor,
-                fontSize: 27,
-              }}
-            />
-          )}
-        </Box>
-
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography
-            noWrap
-            sx={{
-              color: theme.palette.app.text,
-              fontWeight: 900,
-              fontSize: { xs: "0.94rem", md: "1rem" },
-              letterSpacing: "-0.15px",
-            }}
-          >
-            {note.title || "Nota sin título"}
-          </Typography>
-
-          <Stack
-            direction="row"
-            alignItems="center"
-            spacing={0.7}
-            sx={{ mt: 0.45, minWidth: 0 }}
-          >
-            <FolderRoundedIcon
-              sx={{
-                fontSize: 15,
-                color: theme.palette.app.secondary,
-                flexShrink: 0,
-              }}
-            />
-
-            <Typography
-              noWrap
-              sx={{
-                color: theme.palette.app.secondary,
-                fontSize: "0.82rem",
-                fontWeight: 650,
-                minWidth: 0,
-              }}
-            >
-              {note.projectName || "Nota personal"}
-            </Typography>
-          </Stack>
-        </Box>
-      </Stack>
-    </Card>
-  );
-};
-
-const HomeSkeleton = () => {
-  const theme = useTheme();
-
-  return (
-    <Stack spacing={{ xs: 2, md: 2.4 }}>
-      <Skeleton
-        variant="rounded"
-        height={185}
-        sx={{
-          ...getSoftFadeSx(0),
-          borderRadius: "24px",
-          backgroundColor:
-            theme.palette.mode === "dark"
-              ? alpha("#FFFFFF", 0.08)
-              : alpha("#0F172A", 0.08),
-        }}
-      />
-
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: {
-            xs: "1fr 1fr",
-            md: "repeat(4, 1fr)",
-          },
-          gap: { xs: 1.2, md: 1.6 },
-        }}
-      >
-        {[1, 2, 3, 4].map((item, index) => (
-          <Skeleton
-            key={item}
-            variant="rounded"
-            height={92}
-            sx={{
-              ...getSoftFadeSx(index * 45),
-              borderRadius: "20px",
-              backgroundColor:
-                theme.palette.mode === "dark"
-                  ? alpha("#FFFFFF", 0.08)
-                  : alpha("#0F172A", 0.08),
-            }}
-          />
-        ))}
-      </Box>
-
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: {
-            xs: "1fr",
-            lg: "1fr 1fr",
-          },
-          gap: { xs: 2, md: 2.4 },
-        }}
-      >
-        <Skeleton
-          variant="rounded"
-          height={240}
-          sx={{
-            ...getSoftFadeSx(120),
-            borderRadius: "24px",
-            backgroundColor:
-              theme.palette.mode === "dark"
-                ? alpha("#FFFFFF", 0.08)
-                : alpha("#0F172A", 0.08),
-          }}
-        />
-
-        <Skeleton
-          variant="rounded"
-          height={240}
-          sx={{
-            ...getSoftFadeSx(165),
-            borderRadius: "24px",
-            backgroundColor:
-              theme.palette.mode === "dark"
-                ? alpha("#FFFFFF", 0.08)
-                : alpha("#0F172A", 0.08),
-          }}
-        />
-      </Box>
-
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: {
-            xs: "1fr",
-            lg: "1fr 1fr",
-          },
-          gap: { xs: 2, md: 2.4 },
-        }}
-      >
-        <Skeleton
-          variant="rounded"
-          height={315}
-          sx={{
-            ...getSoftFadeSx(210),
-            borderRadius: "24px",
-            backgroundColor:
-              theme.palette.mode === "dark"
-                ? alpha("#FFFFFF", 0.08)
-                : alpha("#0F172A", 0.08),
-          }}
-        />
-
-        <Skeleton
-          variant="rounded"
-          height={315}
-          sx={{
-            ...getSoftFadeSx(255),
-            borderRadius: "24px",
-            backgroundColor:
-              theme.palette.mode === "dark"
-                ? alpha("#FFFFFF", 0.08)
-                : alpha("#0F172A", 0.08),
-          }}
-        />
-      </Box>
+    <Stack spacing={{ xs: 1.5, md: 1.75 }} sx={{ maxWidth: 1280, mx: "auto" }}>
+      {row([260, 260], 0)}
+      {row([300, 300], 120)}
+      {row([240, 240], 240)}
     </Stack>
   );
-};
+}
 
 export default Home;

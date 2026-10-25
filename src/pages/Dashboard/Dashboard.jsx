@@ -1,818 +1,164 @@
-// Importaciones:
-import React, { useEffect, useMemo, useRef, useState } from "react";
+//Importaciones:
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Box,
-  Drawer,
   AppBar,
-  Toolbar,
-  Typography,
+  Avatar,
+  Box,
+  CircularProgress,
+  Drawer,
+  IconButton,
+  InputBase,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Divider,
-  IconButton,
-  Stack,
-  Chip,
-  Paper,
-  Avatar,
+  Toolbar,
   Tooltip,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
+  Typography,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
-import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
-import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
-import AssignmentRoundedIcon from "@mui/icons-material/AssignmentRounded";
-import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
-import PaymentsRoundedIcon from "@mui/icons-material/PaymentsRounded";
-import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
-import AssessmentRoundedIcon from "@mui/icons-material/AssessmentRounded";
-import StorageRoundedIcon from "@mui/icons-material/StorageRounded";
-import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
-import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
-import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
-import LinkRoundedIcon from "@mui/icons-material/LinkRounded";
-import VpnKeyRoundedIcon from "@mui/icons-material/VpnKeyRounded";
-import CodeRoundedIcon from "@mui/icons-material/CodeRounded";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
-import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
-import EditRoundedIcon from "@mui/icons-material/EditRounded";
+import AssessmentRoundedIcon from "@mui/icons-material/AssessmentRounded";
+import AssignmentRoundedIcon from "@mui/icons-material/AssignmentRounded";
 import CheckRoundedIcon from "@mui/icons-material/CheckRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
+import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
+import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
+import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
+import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
+import LinkRoundedIcon from "@mui/icons-material/LinkRounded";
+import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
+import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
+import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
+import PaymentsRoundedIcon from "@mui/icons-material/PaymentsRounded";
 import PhotoCameraRoundedIcon from "@mui/icons-material/PhotoCameraRounded";
+import StorageRoundedIcon from "@mui/icons-material/StorageRounded";
+import VpnKeyRoundedIcon from "@mui/icons-material/VpnKeyRounded";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import logoLight from "../../assets/images/logo-light.png";
-import logoDark from "../../assets/images/logo-dark.png";
-import Home from "../../components/Home/Home";
-import Tareas from "../../components/Tareas/Tareas";
-import Proyectos from "../../components/Proyectos/Proyectos";
-import Pagos from "../../components/Pagos/Pagos";
-import Notas from "../../components/Notas/Notas";
-import Informes from "../../components/Informes/Informes";
-import DataBase from "../../components/DataBase/DataBase";
-import Enlaces from "../../components/Enlaces/Enlaces";
-import Credenciales from "../../components/Credenciales/Credenciales";
-import Config from "../../components/Config/Config";
+import logoIcon from "../../assets/images/logo-icon.png";
+import logoFullDark from "../../assets/images/logo-full-dark.png";
+import logoFullLight from "../../assets/images/logo-full-light.png";
 import { useThemeMode } from "../../context/ThemeModeContext";
 import { useAuth } from "../../context/AuthContext";
 import { db, storage } from "../../firebase/firebase";
+import { ConfirmDialog, Stack, Toast, useToast } from "../../shared/ui";
 
-// JSX:
-const drawerWidth = 280;
-
-const sections = [
-  {
-    id: "inicio",
-    title: "Inicio",
-    description: "Resumen general de tu espacio de trabajo",
-    icon: <DashboardRoundedIcon />,
-  },
-  {
-    id: "tareas",
-    title: "Tareas",
-    description: "Organización diaria y pendientes",
-    icon: <AssignmentRoundedIcon />,
-  },
-  {
-    id: "proyectos",
-    title: "Proyectos",
-    description: "Seguimiento de tus proyectos activos",
-    icon: <FolderRoundedIcon />,
-  },
-  {
-    id: "pagos",
-    title: "Pagos",
-    description: "Control de ingresos, cobros y movimientos",
-    icon: <PaymentsRoundedIcon />,
-  },
-  {
-    id: "notas",
-    title: "Notas",
-    description: "Ideas, apuntes y recordatorios rápidos",
-    icon: <NotesRoundedIcon />,
-  },
-  {
-    id: "informes",
-    title: "Informes",
-    description: "Métricas, estadísticas y reportes",
-    icon: <AssessmentRoundedIcon />,
-  },
-  {
-    id: "database",
-    title: "Base de datos",
-    description: "Accesos, colecciones y recursos técnicos",
-    icon: <StorageRoundedIcon />,
-  },
-  {
-    id: "enlaces",
-    title: "Enlaces",
-    description: "Sitios web, aplicaciones y recursos de tus proyectos",
-    icon: <LinkRoundedIcon />,
-  },
-  {
-    id: "credenciales",
-    title: "Credenciales",
-    description: "Accesos y datos sensibles asociados a tus proyectos",
-    icon: <VpnKeyRoundedIcon />,
-  },
-  {
-    id: "configuracion",
-    title: "Configuración",
-    description: "Preferencias generales de la aplicación",
-    icon: <SettingsRoundedIcon />,
-  },
+//JSX:
+const section = (id, title, icon, load) => ({ id, title, icon, component: lazy(load) });
+const SECTIONS = [
+  section("inicio", "Inicio", <DashboardRoundedIcon />, () => import("../../components/Home/Home")),
+  section(
+    "tareas",
+    "Tareas",
+    <AssignmentRoundedIcon />,
+    () => import("../../components/Tareas/Tareas"),
+  ),
+  section(
+    "proyectos",
+    "Proyectos",
+    <FolderRoundedIcon />,
+    () => import("../../components/Proyectos/Proyectos"),
+  ),
+  section("pagos", "Pagos", <PaymentsRoundedIcon />, () => import("../../components/Pagos/Pagos")),
+  section("notas", "Notas", <NotesRoundedIcon />, () => import("../../components/Notas/Notas")),
+  section(
+    "informes",
+    "Informes",
+    <AssessmentRoundedIcon />,
+    () => import("../../components/Informes/Informes"),
+  ),
+  section(
+    "database",
+    "Base de datos",
+    <StorageRoundedIcon />,
+    () => import("../../components/DataBase/DataBase"),
+  ),
+  section(
+    "enlaces",
+    "Enlaces",
+    <LinkRoundedIcon />,
+    () => import("../../components/Enlaces/Enlaces"),
+  ),
+  section(
+    "credenciales",
+    "Credenciales",
+    <VpnKeyRoundedIcon />,
+    () => import("../../components/Credenciales/Credenciales"),
+  ),
 ];
+
+const DRAWER_WIDTH = { md: 248, lg: 264 };
+const HEADER_HEIGHT = { xs: 64, md: 72 };
+const SECTION_KEY = "codedesk_section";
+const v = (min, vh, max) => `clamp(${min}px, ${vh}vh, ${max}px)`;
+const px = (obj) => Object.fromEntries(Object.entries(obj).map(([k, val]) => [k, `${val}px`]));
+
+const readStorage = (key, fallback) => {
+  try {
+    return localStorage.getItem(key) || fallback;
+  } catch {
+    return fallback;
+  }
+};
+const writeStorage = (key, value) => {
+  try {
+    if (value == null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+  }
+};
 
 const Dashboard = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const fileInputRef = useRef(null);
-
   const { isDark, toggleThemeMode } = useThemeMode();
-  const { logout, user } = useAuth();
+  const { logout } = useAuth();
 
-  const [selectedSection, setSelectedSection] = useState("inicio");
+  const [sectionId, setSectionId] = useState(() => readStorage(SECTION_KEY, "inicio"));
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
-  const [currentDateTime, setCurrentDateTime] = useState(new Date());
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const profile = useUserProfile();
 
-  const [nombreUsuario, setNombreUsuario] = useState("Aure");
-  const [nombreInput, setNombreInput] = useState("Aure");
-  const [editingName, setEditingName] = useState(false);
-  const [profileImage, setProfileImage] = useState(null);
-  const [savingProfile, setSavingProfile] = useState(false);
+  const current = SECTIONS.find((item) => item.id === sectionId) || SECTIONS[0];
+  const SectionComponent = current.component;
 
-  const dashboardLogo = isDark ? logoDark : logoLight;
-
-  const uid = user?.uid || localStorage.getItem("uid") || null;
-  const email = user?.email || localStorage.getItem("email") || "";
-
-  const currentSection = useMemo(() => {
-    return sections.find((item) => item.id === selectedSection) || sections[0];
-  }, [selectedSection]);
-
-  const formattedDay = useMemo(() => {
-    const value = new Intl.DateTimeFormat("es-AR", {
-      weekday: "long",
-      day: "2-digit",
-      month: "long",
-    }).format(currentDateTime);
-
-    return value.charAt(0).toUpperCase() + value.slice(1);
-  }, [currentDateTime]);
-
-  const formattedTime = useMemo(() => {
-    return new Intl.DateTimeFormat("es-AR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(currentDateTime);
-  }, [currentDateTime]);
-
-  const userInitials = useMemo(() => {
-    const partes = nombreUsuario
-      .trim()
-      .split(" ")
-      .filter(Boolean)
-      .slice(0, 2);
-
-    if (!partes.length) return "U";
-
-    return partes.map((item) => item[0]?.toUpperCase()).join("");
-  }, [nombreUsuario]);
-
-  useEffect(() => {
-    async function loadUserProfile() {
-      try {
-        const localName = localStorage.getItem("nombreCompleto") || "Aure";
-
-        if (!uid) {
-          setNombreUsuario(localName);
-          setNombreInput(localName);
-          return;
-        }
-
-        const userRef = doc(db, "users", uid);
-        const userSnapshot = await getDoc(userRef);
-
-        if (userSnapshot.exists()) {
-          const data = userSnapshot.data();
-
-          const backendName = data.name || data.nombreCompleto || localName;
-          const backendImage = data.profileImageUrl || null;
-
-          setNombreUsuario(backendName);
-          setNombreInput(backendName);
-          setProfileImage(backendImage);
-
-          localStorage.setItem("nombreCompleto", backendName);
-        } else {
-          await setDoc(
-            userRef,
-            {
-              uid,
-              email,
-              name: localName,
-              profileImageUrl: null,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true }
-          );
-
-          setNombreUsuario(localName);
-          setNombreInput(localName);
-          setProfileImage(null);
-        }
-      } catch (error) {
-        console.error("Error cargando perfil:", error);
-
-        const localName = localStorage.getItem("nombreCompleto") || "Aure";
-        setNombreUsuario(localName);
-        setNombreInput(localName);
-      }
-    }
-
-    loadUserProfile();
-  }, [uid, email]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentDateTime(new Date());
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleChangeSection = (id) => {
-    setSelectedSection(id);
+  const changeSection = (id) => {
+    setSectionId(id);
+    writeStorage(SECTION_KEY, id);
     setMobileOpen(false);
-  };
-
-  const handleStartEditName = () => {
-    setNombreInput(nombreUsuario);
-    setEditingName(true);
-  };
-
-  const handleCancelEditName = () => {
-    setNombreInput(nombreUsuario);
-    setEditingName(false);
-  };
-
-  const handleSaveName = async () => {
-    try {
-      const cleanName = nombreInput.trim() || "Aure";
-
-      setSavingProfile(true);
-
-      if (uid) {
-        await setDoc(
-          doc(db, "users", uid),
-          {
-            uid,
-            email,
-            name: cleanName,
-            nombreCompleto: cleanName,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-      }
-
-      setNombreUsuario(cleanName);
-      setNombreInput(cleanName);
-      localStorage.setItem("nombreCompleto", cleanName);
-      setEditingName(false);
-    } catch (error) {
-      console.error("Error guardando nombre:", error);
-      window.alert("No se pudo guardar el nombre.");
-    } finally {
-      setSavingProfile(false);
-    }
-  };
-
-  const handlePickProfileImage = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleProfileImageChange = async (event) => {
-    try {
-      const file = event.target.files?.[0];
-
-      if (!file) return;
-
-      if (!file.type?.startsWith("image/")) {
-        window.alert("Seleccioná una imagen válida.");
-        event.target.value = "";
-        return;
-      }
-
-      if (!uid) {
-        window.alert("No se pudo identificar el usuario.");
-        event.target.value = "";
-        return;
-      }
-
-      setSavingProfile(true);
-
-      const safeFileName = file.name.replace(/\s+/g, "-").toLowerCase();
-      const imageRef = ref(
-        storage,
-        `users/${uid}/profile/${Date.now()}-${safeFileName}`
-      );
-
-      await uploadBytes(imageRef, file);
-
-      const downloadUrl = await getDownloadURL(imageRef);
-
-      await setDoc(
-        doc(db, "users", uid),
-        {
-          uid,
-          email,
-          profileImageUrl: downloadUrl,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      setProfileImage(downloadUrl);
-      event.target.value = "";
-    } catch (error) {
-      console.error("Error guardando imagen:", error);
-      window.alert("No se pudo guardar la imagen.");
-      event.target.value = "";
-    } finally {
-      setSavingProfile(false);
-    }
+    window.scrollTo({ top: 0 });
   };
 
   const handleLogout = async () => {
     try {
-      if (logout) {
-        await logout();
-      }
-
-      localStorage.removeItem("nombreCompleto");
-      localStorage.removeItem("rol");
-      localStorage.removeItem("uid");
-      localStorage.removeItem("email");
-
+      await logout?.();
+      ["nombreCompleto", "rol", "uid", "email", SECTION_KEY].forEach((key) =>
+        writeStorage(key, null),
+      );
       navigate("/login", { replace: true });
     } catch (error) {
       console.error("Error cerrando sesión:", error);
     }
   };
 
-  const renderSection = () => {
-    switch (currentSection?.id) {
-      case "inicio":
-        return <Home />;
-
-      case "tareas":
-        return <Tareas />;
-
-      case "proyectos":
-        return <Proyectos />;
-
-      case "pagos":
-        return <Pagos />;
-
-      case "notas":
-        return <Notas />;
-
-      case "informes":
-        return <Informes />;
-
-      case "database":
-        return <DataBase />;
-
-      case "enlaces":
-        return <Enlaces />;
-
-      case "credenciales":
-        return <Credenciales />;
-
-      case "configuracion":
-        return <Config />;
-
-      default:
-        return (
-          <Typography
-            sx={{
-              color: theme.palette.app.secondary,
-              fontWeight: 600,
-            }}
-          >
-            Sección no encontrada.
-          </Typography>
-        );
-    }
-  };
-
-  const drawerContent = (
-    <Box
-      sx={{
-        height: "100%",
-        backgroundColor: theme.palette.app.surface,
-        color: theme.palette.app.text,
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      <Box
-        sx={{
-          px: 2.5,
-          py: 1.8,
-          height: 130,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Box
-          component="img"
-          src={dashboardLogo}
-          alt="CodeDesk"
-          sx={{
-            width: 180,
-            height: 180,
-            marginTop: 1,
-            objectFit: "contain",
-            borderRadius: "24px",
-          }}
-        />
-      </Box>
-
-      <Divider sx={{ borderColor: theme.palette.app.borderSoft }} />
-
-      <List
-        sx={{
-          px: 1.5,
-          py: 2,
-          flex: 1,
-          overflowY: "auto",
-        }}
-      >
-        {sections.map((item) => {
-          const active = selectedSection === item.id;
-
-          return (
-            <ListItemButton
-              key={item.id}
-              onClick={() => handleChangeSection(item.id)}
-              sx={{
-                mb: 0.8,
-                borderRadius: "16px",
-                minHeight: 54,
-                px: 1.6,
-                color: active
-                  ? theme.palette.primary.main
-                  : theme.palette.app.text,
-                backgroundColor: active
-                  ? theme.palette.app.primarySoft
-                  : "transparent",
-                border: active
-                  ? `1px solid ${theme.palette.app.borderSoft}`
-                  : "1px solid transparent",
-                transition: "all 0.18s ease",
-                "&:hover": {
-                  backgroundColor: active
-                    ? theme.palette.app.primarySoft
-                    : theme.palette.app.surfaceSoft,
-                  transform: "translateX(2px)",
-                },
-              }}
-            >
-              <ListItemIcon
-                sx={{
-                  color: active
-                    ? theme.palette.primary.main
-                    : theme.palette.app.secondary,
-                  minWidth: 42,
-                  "& svg": {
-                    fontSize: 24,
-                  },
-                }}
-              >
-                {item.icon}
-              </ListItemIcon>
-
-              <ListItemText
-                primary={item.title}
-                primaryTypographyProps={{
-                  fontWeight: active ? 850 : 650,
-                  fontSize: "0.96rem",
-                }}
-              />
-            </ListItemButton>
-          );
-        })}
-      </List>
-
-      <Box sx={{ p: 2 }}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: 1.6,
-            borderRadius: "22px",
-            background: `linear-gradient(135deg, ${theme.palette.app.primarySoft}, transparent)`,
-            border: `1px solid ${theme.palette.app.borderSoft}`,
-          }}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={handleProfileImageChange}
-          />
-
-          <Stack direction="row" alignItems="center" spacing={1.4}>
-            <Box
-              sx={{
-                position: "relative",
-                flexShrink: 0,
-              }}
-            >
-              <Tooltip title="Cambiar imagen" placement="top" arrow>
-                <Avatar
-                  src={profileImage || undefined}
-                  onClick={savingProfile ? undefined : handlePickProfileImage}
-                  sx={{
-                    width: 48,
-                    height: 48,
-                    bgcolor: theme.palette.primary.main,
-                    color: "#ffffff",
-                    fontWeight: 900,
-                    fontSize: "0.95rem",
-                    boxShadow: isDark
-                      ? "0 10px 22px rgba(96, 165, 250, 0.20)"
-                      : "0 10px 22px rgba(37, 99, 235, 0.20)",
-                    cursor: savingProfile ? "default" : "pointer",
-                    border: `2px solid ${theme.palette.app.surface}`,
-                    opacity: savingProfile ? 0.7 : 1,
-                    "&:hover": {
-                      transform: savingProfile ? "none" : "translateY(-1px)",
-                      boxShadow: isDark
-                        ? "0 14px 28px rgba(96, 165, 250, 0.26)"
-                        : "0 14px 28px rgba(37, 99, 235, 0.26)",
-                    },
-                    transition: "all 0.18s ease",
-                  }}
-                >
-                  {!profileImage && userInitials}
-                </Avatar>
-              </Tooltip>
-
-              <Box
-                onClick={savingProfile ? undefined : handlePickProfileImage}
-                sx={{
-                  position: "absolute",
-                  right: -3,
-                  bottom: -3,
-                  width: 23,
-                  height: 23,
-                  borderRadius: "999px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#ffffff",
-                  backgroundColor: theme.palette.primary.main,
-                  border: `2px solid ${theme.palette.app.surface}`,
-                  cursor: savingProfile ? "default" : "pointer",
-                  opacity: savingProfile ? 0.7 : 1,
-                  "& svg": {
-                    fontSize: 13,
-                  },
-                }}
-              >
-                <PhotoCameraRoundedIcon />
-              </Box>
-            </Box>
-
-            <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography
-                sx={{
-                  fontSize: "0.76rem",
-                  color: theme.palette.app.secondary,
-                  fontWeight: 600,
-                  lineHeight: 1.2,
-                  mb: 0.35,
-                }}
-              >
-                Sesión actual
-              </Typography>
-
-              {editingName ? (
-                <Stack direction="row" alignItems="center" spacing={0.6}>
-                  <TextField
-                    value={nombreInput}
-                    onChange={(event) => setNombreInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        handleSaveName();
-                      }
-
-                      if (event.key === "Escape") {
-                        handleCancelEditName();
-                      }
-                    }}
-                    autoFocus
-                    size="small"
-                    variant="outlined"
-                    placeholder="Tu nombre"
-                    disabled={savingProfile}
-                    sx={{
-                      flex: 1,
-                      minWidth: 0,
-                      "& .MuiOutlinedInput-root": {
-                        height: 34,
-                        borderRadius: "12px",
-                        backgroundColor: theme.palette.app.surface,
-                        color: theme.palette.app.text,
-                        fontWeight: 850,
-                        fontSize: "0.86rem",
-                      },
-                      "& .MuiOutlinedInput-input": {
-                        px: 1.1,
-                        py: 0.6,
-                      },
-                    }}
-                  />
-
-                  <IconButton
-                    onClick={handleSaveName}
-                    disabled={savingProfile}
-                    sx={{
-                      width: 30,
-                      height: 30,
-                      borderRadius: "11px",
-                      color: theme.palette.app.success,
-                      backgroundColor:
-                        theme.palette.mode === "dark"
-                          ? alpha(theme.palette.success.main, 0.14)
-                          : alpha(theme.palette.success.main, 0.1),
-                      border: `1px solid ${alpha(
-                        theme.palette.success.main,
-                        0.18
-                      )}`,
-                      "&:hover": {
-                        backgroundColor:
-                          theme.palette.mode === "dark"
-                            ? alpha(theme.palette.success.main, 0.2)
-                            : alpha(theme.palette.success.main, 0.14),
-                      },
-                    }}
-                  >
-                    <CheckRoundedIcon sx={{ fontSize: 18 }} />
-                  </IconButton>
-
-                  <IconButton
-                    onClick={handleCancelEditName}
-                    disabled={savingProfile}
-                    sx={{
-                      width: 30,
-                      height: 30,
-                      borderRadius: "11px",
-                      color: theme.palette.app.secondary,
-                      backgroundColor:
-                        theme.palette.mode === "dark"
-                          ? alpha("#FFFFFF", 0.045)
-                          : alpha("#0F172A", 0.035),
-                      border: `1px solid ${theme.palette.app.borderSoft}`,
-                      "&:hover": {
-                        color: theme.palette.app.danger,
-                        backgroundColor:
-                          theme.palette.mode === "dark"
-                            ? alpha(theme.palette.error.main, 0.14)
-                            : alpha(theme.palette.error.main, 0.08),
-                      },
-                    }}
-                  >
-                    <CloseRoundedIcon sx={{ fontSize: 18 }} />
-                  </IconButton>
-                </Stack>
-              ) : (
-                <Tooltip title={nombreUsuario} placement="top" arrow>
-                  <Stack
-                    direction="row"
-                    alignItems="center"
-                    spacing={0.75}
-                    sx={{
-                      minWidth: 0,
-                      width: "100%",
-                    }}
-                  >
-                    <Typography
-                      noWrap
-                      sx={{
-                        fontWeight: 850,
-                        color: theme.palette.app.text,
-                        fontSize: "0.95rem",
-                        lineHeight: 1.25,
-                        minWidth: 0,
-                        flex: 1,
-                      }}
-                    >
-                      {nombreUsuario}
-                    </Typography>
-
-                    <IconButton
-                      onClick={handleStartEditName}
-                      disabled={savingProfile}
-                      sx={{
-                        width: 25,
-                        height: 25,
-                        borderRadius: "9px",
-                        color: theme.palette.primary.main,
-                        backgroundColor: theme.palette.app.primarySoft,
-                        border: `1px solid ${theme.palette.app.borderSoft}`,
-                        flexShrink: 0,
-                        "&:hover": {
-                          backgroundColor: theme.palette.app.primarySoft,
-                          transform: "translateY(-1px)",
-                        },
-                        transition: "all 0.18s ease",
-                      }}
-                    >
-                      <EditRoundedIcon sx={{ fontSize: 14 }} />
-                    </IconButton>
-
-                    <Box
-                      sx={{
-                        width: 23,
-                        height: 23,
-                        borderRadius: "9px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: theme.palette.primary.main,
-                        backgroundColor: theme.palette.app.primarySoft,
-                        border: `1px solid ${theme.palette.app.borderSoft}`,
-                        flexShrink: 0,
-                      }}
-                    >
-                      <CodeRoundedIcon sx={{ fontSize: 14 }} />
-                    </Box>
-                  </Stack>
-                </Tooltip>
-              )}
-            </Box>
-          </Stack>
-
-          <Divider
-            sx={{
-              my: 1.35,
-              borderColor: theme.palette.app.borderSoft,
-            }}
-          />
-
-          <Button
-            fullWidth
-            onClick={() => setLogoutDialogOpen(true)}
-            startIcon={<LogoutRoundedIcon />}
-            sx={{
-              minHeight: 36,
-              borderRadius: "14px",
-              fontWeight: 850,
-              textTransform: "none",
-              color: theme.palette.app.danger,
-              backgroundColor: isDark
-                ? "rgba(248, 113, 113, 0.10)"
-                : "rgba(220, 38, 38, 0.08)",
-              border: `1px solid ${
-                isDark
-                  ? "rgba(248, 113, 113, 0.20)"
-                  : "rgba(220, 38, 38, 0.14)"
-              }`,
-              "&:hover": {
-                backgroundColor: isDark
-                  ? "rgba(248, 113, 113, 0.14)"
-                  : "rgba(220, 38, 38, 0.11)",
-                transform: "translateY(-1px)",
-              },
-              transition: "all 0.18s ease",
-              "& .MuiButton-startIcon": {
-                mr: 0.8,
-              },
-              "& svg": {
-                fontSize: 18,
-              },
-            }}
-          >
-            Cerrar sesión
-          </Button>
-        </Paper>
-      </Box>
-    </Box>
+  const sidebar = (
+    <Sidebar
+      activeId={current.id}
+      onSelect={changeSection}
+      onLogout={() => setLogoutOpen(true)}
+      profile={profile}
+    />
   );
+  const drawerPaperSx = {
+    width: px(DRAWER_WIDTH),
+    boxSizing: "border-box",
+    border: "none",
+    borderRight: `1px solid ${theme.palette.app.borderSoft}`,
+    backgroundColor: theme.palette.app.surface,
+  };
 
   return (
     <Box
@@ -827,162 +173,51 @@ const Dashboard = () => {
         position="fixed"
         elevation={0}
         sx={{
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          ml: { md: `${drawerWidth}px` },
-          backgroundColor: isDark
-            ? "rgba(15, 23, 42, 0.88)"
-            : "rgba(255, 255, 255, 0.92)",
-          backdropFilter: "blur(12px)",
+          width: {
+            md: `calc(100% - ${DRAWER_WIDTH.md}px)`,
+            lg: `calc(100% - ${DRAWER_WIDTH.lg}px)`,
+          },
+          ml: px(DRAWER_WIDTH),
+          backgroundColor: alpha(theme.palette.app.background, isDark ? 0.78 : 0.82),
+          backdropFilter: "saturate(180%) blur(14px)",
           color: theme.palette.app.text,
           borderBottom: `1px solid ${theme.palette.app.borderSoft}`,
         }}
       >
         <Toolbar
+          disableGutters
           sx={{
             minHeight: {
-              xs: "76px !important",
-              md: "82px !important",
+              xs: `${HEADER_HEIGHT.xs}px !important`,
+              md: `${HEADER_HEIGHT.md}px !important`,
             },
-            pt: { xs: 0.8, md: 1 },
-            pb: { xs: 0.7, md: 0.9 },
-            alignItems: "center",
-            px: {
-              xs: 1.5,
-              sm: 2,
-              md: 3,
-            },
-            display: "flex",
-            justifyContent: "space-between",
-            gap: {
-              xs: 1,
-              sm: 2,
-            },
+            px: { xs: 1.5, sm: 2.5, md: 3.5 },
+            gap: 1.5,
           }}
         >
-          <Stack
-            direction="row"
-            alignItems="center"
-            spacing={{
-              xs: 1,
-              sm: 1.5,
-            }}
-            sx={{
-              minWidth: 0,
-              flex: 1,
-            }}
+          <IconButton
+            aria-label="Abrir menú"
+            onClick={() => setMobileOpen(true)}
+            sx={{ ...softIconButtonSx(theme), display: { md: "none" } }}
           >
-            <IconButton
-              onClick={() => setMobileOpen(true)}
-              sx={{
-                display: { md: "none" },
-                color: theme.palette.primary.main,
-                backgroundColor: theme.palette.app.primarySoft,
-                borderRadius: "14px",
-                border: `1px solid ${theme.palette.app.borderSoft}`,
-                "&:hover": {
-                  backgroundColor: theme.palette.app.primarySoft,
-                },
-              }}
-            >
-              <MenuRoundedIcon />
-            </IconButton>
+            <MenuRoundedIcon />
+          </IconButton>
+          <Box sx={{ display: { xs: "flex", md: "none" } }}>
+            <LogoMark size={36} />
+          </Box>
 
-            <Box sx={{ minWidth: 0 }}>
-              <Typography
-                noWrap
-                sx={{
-                  fontWeight: 900,
-                  fontSize: {
-                    xs: "1.08rem",
-                    sm: "1.18rem",
-                    md: "1.38rem",
-                  },
-                  color: theme.palette.app.text,
-                  lineHeight: 1.15,
-                  letterSpacing: "-0.3px",
-                }}
-              >
-                CodeDesk
-              </Typography>
+          <Greeting name={profile.name} />
 
-              <Typography
-                noWrap
-                sx={{
-                  color: theme.palette.app.secondary,
-                  fontSize: "0.9rem",
-                  display: {
-                    xs: "none",
-                    sm: "block",
-                  },
-                  mt: 0.2,
-                  fontWeight: 600,
-                }}
-              >
-                Todo tu flujo de trabajo centralizado en un solo lugar.
-              </Typography>
-            </Box>
-          </Stack>
-
-          <Stack
-            direction="row"
-            alignItems="center"
-            spacing={{
-              xs: 0.8,
-              sm: 1,
-            }}
-            sx={{
-              flexShrink: 0,
-            }}
-          >
-            <Chip
-              icon={<AccessTimeRoundedIcon />}
-              label={`${formattedDay} · ${formattedTime}`}
-              color="primary"
-              variant="outlined"
-              sx={{
-                height: 36,
-                px: 0.6,
-                borderRadius: "999px",
-                fontWeight: 850,
-                textTransform: "capitalize",
-                backgroundColor: theme.palette.app.primarySoft,
-                borderColor: theme.palette.app.borderSoft,
-                display: {
-                  xs: "none",
-                  md: "flex",
-                },
-                "& .MuiChip-icon": {
-                  fontSize: 19,
-                  color: theme.palette.primary.main,
-                  ml: 0.8,
-                },
-                "& .MuiChip-label": {
-                  px: 1.15,
-                  fontSize: "0.82rem",
-                  color: theme.palette.app.text,
-                },
-              }}
-            />
-
-            <Tooltip
-              title={isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
-              placement="bottom"
-              arrow
-            >
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ ml: "auto" }}>
+            <HeaderClock />
+            <Tooltip title={isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"} arrow>
               <IconButton
                 onClick={toggleThemeMode}
+                aria-label="Cambiar tema"
                 sx={{
-                  width: 42,
-                  height: 42,
-                  color: theme.palette.primary.main,
-                  backgroundColor: theme.palette.app.primarySoft,
-                  border: `1px solid ${theme.palette.app.borderSoft}`,
-                  borderRadius: "14px",
-                  "&:hover": {
-                    backgroundColor: theme.palette.app.primarySoft,
-                    transform: "translateY(-1px)",
-                  },
-                  transition: "all 0.18s ease",
+                  ...softIconButtonSx(theme),
+                  "& svg": { transition: "transform 0.4s ease" },
+                  "&:hover svg": { transform: "rotate(25deg)" },
                 }}
               >
                 {isDark ? <LightModeRoundedIcon /> : <DarkModeRoundedIcon />}
@@ -992,13 +227,7 @@ const Dashboard = () => {
         </Toolbar>
       </AppBar>
 
-      <Box
-        component="nav"
-        sx={{
-          width: { md: drawerWidth },
-          flexShrink: { md: 0 },
-        }}
-      >
+      <Box component="nav" sx={{ width: px(DRAWER_WIDTH), flexShrink: { md: 0 } }}>
         <Drawer
           variant="temporary"
           open={mobileOpen}
@@ -1007,184 +236,55 @@ const Dashboard = () => {
           sx={{
             display: { xs: "block", md: "none" },
             "& .MuiDrawer-paper": {
-              width: drawerWidth,
-              boxSizing: "border-box",
-              borderRight: `1px solid ${theme.palette.app.borderSoft}`,
+              ...drawerPaperSx,
+              width: 280,
               boxShadow: isDark
-                ? "0 20px 60px rgba(0, 0, 0, 0.45)"
-                : "0 20px 60px rgba(15, 23, 42, 0.18)",
+                ? "0 20px 60px rgba(0,0,0,0.45)"
+                : "0 20px 60px rgba(15,23,42,0.18)",
             },
           }}
         >
-          {drawerContent}
+          {sidebar}
         </Drawer>
-
         <Drawer
           variant="permanent"
           open
-          sx={{
-            display: { xs: "none", md: "block" },
-            "& .MuiDrawer-paper": {
-              width: drawerWidth,
-              boxSizing: "border-box",
-              borderRight: `1px solid ${theme.palette.app.borderSoft}`,
-            },
-          }}
+          sx={{ display: { xs: "none", md: "block" }, "& .MuiDrawer-paper": drawerPaperSx }}
         >
-          {drawerContent}
+          {sidebar}
         </Drawer>
       </Box>
 
       <Box
         component="main"
-        sx={{
-          flexGrow: 1,
-          pt: {
-            xs: "76px",
-            md: "82px",
-          },
-          minHeight: "100vh",
-          minWidth: 0,
-          backgroundColor: theme.palette.app.background,
-        }}
+        sx={{ flexGrow: 1, pt: px(HEADER_HEIGHT), minHeight: "100vh", minWidth: 0 }}
       >
         <Box
           sx={{
-            p: {
-              xs: 2,
-              sm: 2.5,
-              md: 4,
-            },
+            px: { xs: 2, sm: 2.5, md: 3, lg: 4 },
+            py: { xs: 2, sm: 2.5, md: v(18, 3.2, 32) },
+            maxWidth: 1600,
+            mx: "auto",
           }}
         >
-          {renderSection()}
+          <Suspense
+            fallback={
+              <Box sx={{ display: "flex", justifyContent: "center", py: 10 }}>
+                <CircularProgress />
+              </Box>
+            }
+          >
+            <SectionComponent key={current.id} onNavigate={changeSection} />
+          </Suspense>
         </Box>
       </Box>
 
-      <LogoutConfirmDialog
-        open={logoutDialogOpen}
-        onClose={() => setLogoutDialogOpen(false)}
-        onConfirm={handleLogout}
-      />
-    </Box>
-  );
-};
-
-const LogoutConfirmDialog = ({ open, onClose, onConfirm }) => {
-  const theme = useTheme();
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      fullWidth
-      maxWidth="xs"
-      PaperProps={{
-        sx: {
-          borderRadius: "22px",
-          backgroundColor: theme.palette.app.surface,
-          backgroundImage: "none",
-          border: `1px solid ${theme.palette.app.borderSoft}`,
-          boxShadow:
-            theme.palette.mode === "dark"
-              ? "0 28px 90px rgba(0, 0, 0, 0.55)"
-              : "0 28px 80px rgba(15, 23, 42, 0.18)",
-          overflow: "hidden",
-        },
-      }}
-    >
-      <DialogTitle
-        sx={{
-          position: "relative",
-          px: 3,
-          pt: 3,
-          pb: 1.8,
-          pr: 7,
-        }}
-      >
-        <Stack direction="row" alignItems="center" spacing={1.4}>
-          <Avatar
-            variant="rounded"
-            sx={{
-              width: 52,
-              height: 52,
-              borderRadius: "16px",
-              color: theme.palette.app.danger,
-              backgroundColor:
-                theme.palette.mode === "dark"
-                  ? alpha(theme.palette.error.main, 0.14)
-                  : alpha(theme.palette.error.main, 0.1),
-              border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`,
-              flexShrink: 0,
-            }}
-          >
-            <LogoutRoundedIcon sx={{ fontSize: 27 }} />
-          </Avatar>
-
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
-              sx={{
-                color: theme.palette.app.text,
-                fontSize: "1.35rem",
-                fontWeight: 950,
-                lineHeight: 1.15,
-                letterSpacing: "-0.35px",
-              }}
-            >
-              Cerrar sesión
-            </Typography>
-
-            <Typography
-              sx={{
-                mt: 0.45,
-                color: theme.palette.app.secondary,
-                fontSize: "0.9rem",
-                fontWeight: 650,
-                lineHeight: 1.45,
-              }}
-            >
-              ¿Seguro que querés salir de CodeDesk?
-            </Typography>
-          </Box>
-        </Stack>
-
-        <IconButton
-          onClick={onClose}
-          sx={{
-            position: "absolute",
-            top: 16,
-            right: 16,
-            width: 38,
-            height: 38,
-            borderRadius: "14px",
-            color: theme.palette.app.secondary,
-            backgroundColor:
-              theme.palette.mode === "dark"
-                ? alpha("#FFFFFF", 0.045)
-                : alpha("#0F172A", 0.035),
-            border: `1px solid ${theme.palette.app.borderSoft}`,
-            "&:hover": {
-              color: theme.palette.primary.main,
-              backgroundColor: theme.palette.app.primarySoft,
-            },
-          }}
-        >
-          ×
-        </IconButton>
-      </DialogTitle>
-
-      <DialogContent sx={{ px: 3, pt: 0.4, pb: 2 }}>
-        <Box
-          sx={{
-            borderRadius: "16px",
-            p: 1.6,
-            backgroundColor:
-              theme.palette.mode === "dark"
-                ? alpha("#FFFFFF", 0.035)
-                : alpha("#0F172A", 0.025),
-            border: `1px solid ${theme.palette.app.borderSoft}`,
-          }}
-        >
+      <ConfirmDialog
+        open={logoutOpen}
+        title="Cerrar sesión"
+        text="¿Seguro que querés salir de CodeDesk?"
+        icon={<LogoutRoundedIcon sx={{ fontSize: 27 }} />}
+        preview={
           <Typography
             sx={{
               color: theme.palette.app.secondary,
@@ -1193,46 +293,574 @@ const LogoutConfirmDialog = ({ open, onClose, onConfirm }) => {
               lineHeight: 1.55,
             }}
           >
-            Vas a volver a la pantalla de inicio de sesión. Podés ingresar de
-            nuevo cuando quieras.
+            Vas a volver a la pantalla de inicio de sesión. Podés ingresar de nuevo cuando quieras.
           </Typography>
-        </Box>
-      </DialogContent>
+        }
+        confirmLabel="Salir"
+        confirmIcon={<LogoutRoundedIcon />}
+        onClose={() => setLogoutOpen(false)}
+        onConfirm={handleLogout}
+      />
 
-      <DialogActions sx={{ px: 3, pb: 3, pt: 0.5 }}>
-        <Button
-          fullWidth
-          variant="outlined"
-          onClick={onClose}
-          sx={{
-            minHeight: 42,
-            borderRadius: "14px",
-            fontWeight: 900,
-            textTransform: "none",
-          }}
-        >
-          Cancelar
-        </Button>
-
-        <Button
-          fullWidth
-          variant="contained"
-          color="error"
-          startIcon={<LogoutRoundedIcon />}
-          onClick={onConfirm}
-          sx={{
-            minHeight: 42,
-            borderRadius: "14px",
-            fontWeight: 900,
-            textTransform: "none",
-            boxShadow: "none",
-          }}
-        >
-          Salir
-        </Button>
-      </DialogActions>
-    </Dialog>
+      <Toast toast={profile.toast} onClose={profile.closeToast} />
+    </Box>
   );
 };
+
+const softIconButtonSx = (theme) => ({
+  width: 40,
+  height: 40,
+  color: theme.palette.app.text,
+  backgroundColor: theme.palette.app.surface,
+  border: `1px solid ${theme.palette.app.borderSoft}`,
+  borderRadius: "12px",
+  transition: "all 0.18s ease",
+  "&:hover": {
+    color: theme.palette.primary.main,
+    backgroundColor: theme.palette.app.primarySoft,
+    borderColor: alpha(theme.palette.primary.main, 0.3),
+  },
+});
+
+function LogoMark({ size = 40 }) {
+  return (
+    <Box
+      sx={{
+        width: size,
+        height: size,
+        flexShrink: 0,
+        borderRadius: `${size * 0.3}px`,
+        display: "grid",
+        placeItems: "center",
+        background: "linear-gradient(145deg, #0f1b33, #060b16)",
+        border: "1px solid rgba(96,165,250,0.25)",
+        boxShadow: "0 8px 20px rgba(37,99,235,0.22)",
+      }}
+    >
+      <Box component="img" src={logoIcon} alt="" sx={{ width: "72%", height: "72%" }} />
+    </Box>
+  );
+}
+
+function useNow() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 15000);
+    return () => clearInterval(interval);
+  }, []);
+  return now;
+}
+
+const capitalize = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+
+function Greeting({ name }) {
+  const theme = useTheme();
+  const now = useNow();
+  const hour = now.getHours();
+  const greeting =
+    hour < 6
+      ? "Buenas noches"
+      : hour < 13
+        ? "Buen día"
+        : hour < 20
+          ? "Buenas tardes"
+          : "Buenas noches";
+  const day = new Intl.DateTimeFormat("es-AR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(now);
+
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography
+        noWrap
+        sx={{
+          fontWeight: 850,
+          fontSize: { xs: "1rem", sm: "1.08rem", md: "1.2rem" },
+          lineHeight: 1.2,
+          letterSpacing: "-0.3px",
+        }}
+      >
+        {greeting}, {name.split(" ")[0]}
+      </Typography>
+      <Typography
+        noWrap
+        sx={{
+          color: theme.palette.app.secondary,
+          fontSize: "0.82rem",
+          fontWeight: 600,
+          mt: 0.2,
+          display: { xs: "none", sm: "block" },
+        }}
+      >
+        {capitalize(day)}
+      </Typography>
+    </Box>
+  );
+}
+
+function HeaderClock() {
+  const theme = useTheme();
+  const time = new Intl.DateTimeFormat("es-AR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(useNow());
+
+  return (
+    <Stack
+      direction="row"
+      alignItems="center"
+      spacing={0.8}
+      sx={{
+        height: 40,
+        px: 1.5,
+        borderRadius: "12px",
+        border: `1px solid ${theme.palette.app.borderSoft}`,
+        backgroundColor: theme.palette.app.surface,
+        display: { xs: "none", sm: "flex" },
+      }}
+    >
+      <AccessTimeRoundedIcon sx={{ fontSize: 18, color: theme.palette.primary.main }} />
+      <Typography sx={{ fontWeight: 800, fontSize: "0.88rem", fontVariantNumeric: "tabular-nums" }}>
+        {time}
+      </Typography>
+    </Stack>
+  );
+}
+
+function Sidebar({ activeId, onSelect, onLogout, profile }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
+  return (
+    <Box
+      sx={{
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        color: theme.palette.app.text,
+      }}
+    >
+      <Box
+        sx={{
+          flexShrink: 0,
+          position: "relative",
+          display: "grid",
+          placeItems: "center",
+          px: 2,
+          py: v(14, 2.6, 26),
+          borderBottom: `1px solid ${theme.palette.app.borderSoft}`,
+          overflow: "hidden",
+          "&::before": {
+            content: '""',
+            position: "absolute",
+            width: "85%",
+            height: "75%",
+            borderRadius: "50%",
+            background: `radial-gradient(closest-side, ${alpha(theme.palette.primary.main, isDark ? 0.28 : 0.16)}, transparent)`,
+            filter: "blur(6px)",
+          },
+        }}
+      >
+        <Box
+          component="img"
+          src={isDark ? logoFullDark : logoFullLight}
+          alt="CodeDesk"
+          sx={{
+            position: "relative",
+            width: v(130, 24, 184),
+            height: "auto",
+            display: "block",
+            filter: `drop-shadow(0 10px 22px ${alpha(theme.palette.primary.main, isDark ? 0.35 : 0.22)})`,
+            transition: "transform 0.3s ease",
+            "&:hover": { transform: "scale(1.03)" },
+          }}
+        />
+      </Box>
+
+      <Box
+        component="nav"
+        sx={{
+          flex: 1,
+          overflowY: "auto",
+          px: 1.5,
+          py: v(8, 1.6, 16),
+          scrollbarWidth: "thin",
+        }}
+      >
+        <List disablePadding>
+          {SECTIONS.map((item) => {
+            const active = activeId === item.id;
+            return (
+              <ListItemButton
+                key={item.id}
+                onClick={() => onSelect(item.id)}
+                selected={active}
+                aria-current={active ? "page" : undefined}
+                sx={{
+                  position: "relative",
+                  mb: 0.4,
+                  px: 1.4,
+                  py: 0,
+                  minHeight: v(36, 5.4, 44),
+                  borderRadius: "12px",
+                  color: active ? theme.palette.primary.main : theme.palette.app.text,
+                  transition: "background-color 0.18s ease, color 0.18s ease",
+                  "&::before": {
+                    content: '""',
+                    position: "absolute",
+                    left: -12,
+                    top: "22%",
+                    bottom: "22%",
+                    width: 4,
+                    borderRadius: "0 4px 4px 0",
+                    backgroundColor: theme.palette.primary.main,
+                    opacity: active ? 1 : 0,
+                    transition: "opacity 0.18s ease",
+                  },
+                  "&:hover": { backgroundColor: theme.palette.app.surfaceSoft },
+                  "&.Mui-selected, &.Mui-selected:hover": {
+                    backgroundColor: theme.palette.app.primarySoft,
+                  },
+                  "&:hover .nav-icon": { color: theme.palette.primary.main },
+                }}
+              >
+                <ListItemIcon
+                  className="nav-icon"
+                  sx={{
+                    minWidth: 36,
+                    color: active ? theme.palette.primary.main : theme.palette.app.secondary,
+                    transition: "color 0.18s ease",
+                    "& svg": { fontSize: 21 },
+                  }}
+                >
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText
+                  sx={{ my: 0 }}
+                  primary={item.title}
+                  slotProps={{
+                    primary: {
+                      fontWeight: active ? 800 : 600,
+                      fontSize: "0.92rem",
+                      noWrap: true,
+                    },
+                  }}
+                />
+              </ListItemButton>
+            );
+          })}
+        </List>
+      </Box>
+
+      <Box
+        sx={{
+          p: 1.5,
+          borderTop: `1px solid ${theme.palette.app.borderSoft}`,
+          backgroundColor: isDark ? alpha("#000", 0.12) : alpha(theme.palette.app.surfaceSoft, 0.6),
+        }}
+      >
+        <ProfileCard profile={profile} onLogout={onLogout} />
+      </Box>
+    </Box>
+  );
+}
+
+function useUserProfile() {
+  const { user } = useAuth();
+  const [toast, showToast, closeToast] = useToast();
+
+  const uid = user?.uid || null;
+  const email = user?.email || "";
+  const [name, setName] = useState(() => readStorage("nombreCompleto", "Aure"));
+  const [draft, setDraft] = useState(name);
+  const [editing, setEditing] = useState(false);
+  const [image, setImage] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!uid) return;
+    const userRef = doc(db, "users", uid);
+
+    getDoc(userRef)
+      .then(async (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          const backendName =
+            data.name || data.nombreCompleto || readStorage("nombreCompleto", "Aure");
+          setName(backendName);
+          setImage(data.profileImageUrl || null);
+          writeStorage("nombreCompleto", backendName);
+        } else {
+          await setDoc(
+            userRef,
+            {
+              uid,
+              email,
+              name: readStorage("nombreCompleto", "Aure"),
+              profileImageUrl: null,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true },
+          );
+        }
+      })
+      .catch((error) => console.error("Error cargando perfil:", error));
+  }, [uid, email]);
+
+  const saveProfile = (fields) =>
+    setDoc(
+      doc(db, "users", uid),
+      { uid, email, ...fields, updatedAt: serverTimestamp() },
+      { merge: true },
+    );
+
+  const handleSaveName = async () => {
+    const cleanName = draft.trim() || "Aure";
+    try {
+      setSaving(true);
+      if (uid) await saveProfile({ name: cleanName, nombreCompleto: cleanName });
+      setName(cleanName);
+      writeStorage("nombreCompleto", cleanName);
+      setEditing(false);
+    } catch (error) {
+      console.error("Error guardando nombre:", error);
+      showToast("No se pudo guardar el nombre.", { severity: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleImageChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type?.startsWith("image/"))
+      return showToast("Seleccioná una imagen válida.", { severity: "warning" });
+    if (!uid) return showToast("No se pudo identificar el usuario.", { severity: "error" });
+
+    try {
+      setSaving(true);
+      const imageRef = ref(
+        storage,
+        `users/${uid}/profile/${Date.now()}-${file.name.replace(/\s+/g, "-").toLowerCase()}`,
+      );
+      await uploadBytes(imageRef, file);
+      const url = await getDownloadURL(imageRef);
+      await saveProfile({ profileImageUrl: url });
+      setImage(url);
+      showToast("Imagen de perfil actualizada.");
+    } catch (error) {
+      console.error("Error guardando imagen:", error);
+      showToast("No se pudo guardar la imagen.", { severity: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const initials =
+    name
+      .trim()
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "U";
+
+  return {
+    name,
+    email,
+    draft,
+    setDraft,
+    editing,
+    setEditing,
+    image,
+    saving,
+    initials,
+    handleSaveName,
+    handleImageChange,
+    toast,
+    closeToast,
+  };
+}
+
+function ProfileCard({ profile, onLogout }) {
+  const theme = useTheme();
+  const fileInputRef = useRef(null);
+  const {
+    name,
+    email,
+    draft,
+    setDraft,
+    editing,
+    setEditing,
+    image,
+    saving,
+    initials,
+    handleSaveName,
+    handleImageChange,
+  } = profile;
+  const pickImage = saving ? undefined : () => fileInputRef.current?.click();
+  const action = (color, hoverColor = color) => ({
+    width: 30,
+    height: 30,
+    flexShrink: 0,
+    borderRadius: "10px",
+    color,
+    "&:hover": {
+      color: hoverColor,
+      backgroundColor: alpha(hoverColor, theme.palette.mode === "dark" ? 0.16 : 0.1),
+    },
+    "& svg": { fontSize: 17 },
+  });
+
+  return (
+    <Stack direction="row" alignItems="center" spacing={1.1} sx={{ minHeight: 44 }}>
+      <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handleImageChange} />
+
+      <Tooltip title="Cambiar imagen" placement="top" arrow>
+        <Box
+          onClick={pickImage}
+          sx={{
+            position: "relative",
+            flexShrink: 0,
+            borderRadius: "50%",
+            cursor: saving ? "default" : "pointer",
+            "&:hover .avatar-overlay": { opacity: saving ? 0 : 1 },
+          }}
+        >
+          <Avatar
+            src={image || undefined}
+            sx={{
+              width: 40,
+              height: 40,
+              bgcolor: theme.palette.primary.main,
+              color: "#ffffff",
+              fontWeight: 900,
+              fontSize: "0.88rem",
+              opacity: saving ? 0.6 : 1,
+              boxShadow: `0 0 0 2px ${theme.palette.app.surface}, 0 0 0 3.5px ${alpha(theme.palette.primary.main, 0.45)}`,
+            }}
+          >
+            {!image && initials}
+          </Avatar>
+          <Box
+            className="avatar-overlay"
+            sx={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "50%",
+              display: "grid",
+              placeItems: "center",
+              color: "#fff",
+              backgroundColor: "rgba(2,6,23,0.55)",
+              opacity: 0,
+              transition: "opacity 0.18s ease",
+              "& svg": { fontSize: 17 },
+            }}
+          >
+            <PhotoCameraRoundedIcon />
+          </Box>
+          {saving && (
+            <CircularProgress
+              size={44}
+              thickness={2.5}
+              sx={{ position: "absolute", top: -2, left: -2 }}
+            />
+          )}
+        </Box>
+      </Tooltip>
+
+      {editing ? (
+        <>
+          <InputBase
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") handleSaveName();
+              if (event.key === "Escape") setEditing(false);
+            }}
+            autoFocus
+            placeholder="Tu nombre"
+            disabled={saving}
+            slotProps={{ input: { "aria-label": "Nombre" } }}
+            sx={{
+              flex: 1,
+              minWidth: 0,
+              height: 34,
+              px: 1.1,
+              borderRadius: "10px",
+              fontWeight: 750,
+              fontSize: "0.88rem",
+              backgroundColor: theme.palette.app.surface,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.5)}`,
+              boxShadow: `0 0 0 3px ${alpha(theme.palette.primary.main, 0.12)}`,
+            }}
+          />
+          <IconButton
+            aria-label="Guardar nombre"
+            onClick={handleSaveName}
+            disabled={saving}
+            sx={action(theme.palette.success.main)}
+          >
+            <CheckRoundedIcon />
+          </IconButton>
+          <IconButton
+            aria-label="Cancelar"
+            onClick={() => setEditing(false)}
+            disabled={saving}
+            sx={action(theme.palette.app.secondary)}
+          >
+            <CloseRoundedIcon />
+          </IconButton>
+        </>
+      ) : (
+        <>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography
+              noWrap
+              title={name}
+              sx={{ fontWeight: 800, fontSize: "0.9rem", lineHeight: 1.25 }}
+            >
+              {name}
+            </Typography>
+            <Typography
+              noWrap
+              title={email}
+              sx={{ color: theme.palette.app.secondary, fontSize: "0.74rem", fontWeight: 600 }}
+            >
+              {email || "Sesión actual"}
+            </Typography>
+          </Box>
+          <Tooltip title="Editar nombre" arrow>
+            <IconButton
+              aria-label="Editar nombre"
+              onClick={() => {
+                setDraft(name);
+                setEditing(true);
+              }}
+              disabled={saving}
+              sx={action(theme.palette.app.secondary, theme.palette.primary.main)}
+            >
+              <EditRoundedIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Cerrar sesión" arrow>
+            <IconButton
+              aria-label="Cerrar sesión"
+              onClick={onLogout}
+              sx={action(theme.palette.app.secondary, theme.palette.error.main)}
+            >
+              <LogoutRoundedIcon />
+            </IconButton>
+          </Tooltip>
+        </>
+      )}
+    </Stack>
+  );
+}
 
 export default Dashboard;
