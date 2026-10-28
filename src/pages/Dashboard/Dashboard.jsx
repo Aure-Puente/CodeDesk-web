@@ -92,6 +92,9 @@ const SECTIONS = [
 
 const DRAWER_WIDTH = { md: 248, lg: 264 };
 const HEADER_HEIGHT = { xs: 64, md: 72 };
+const TITLEBAR_MEDIA = "@media (display-mode: window-controls-overlay)";
+const dragSx = { [TITLEBAR_MEDIA]: { WebkitAppRegion: "drag", appRegion: "drag" } };
+const noDragSx = { [TITLEBAR_MEDIA]: { WebkitAppRegion: "no-drag", appRegion: "no-drag" } };
 const SECTION_KEY = "codedesk_section";
 const v = (min, vh, max) => `clamp(${min}px, ${vh}vh, ${max}px)`;
 const px = (obj) => Object.fromEntries(Object.entries(obj).map(([k, val]) => [k, `${val}px`]));
@@ -193,12 +196,17 @@ const Dashboard = () => {
             },
             px: { xs: 1.5, sm: 2.5, md: 3.5 },
             gap: 1.5,
+            ...dragSx,
+            [TITLEBAR_MEDIA]: {
+              ...dragSx[TITLEBAR_MEDIA],
+              pr: "calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 16px)",
+            },
           }}
         >
           <IconButton
             aria-label="Abrir menú"
             onClick={() => setMobileOpen(true)}
-            sx={{ ...softIconButtonSx(theme), display: { md: "none" } }}
+            sx={{ ...softIconButtonSx(theme), ...noDragSx, display: { md: "none" } }}
           >
             <MenuRoundedIcon />
           </IconButton>
@@ -208,7 +216,7 @@ const Dashboard = () => {
 
           <Greeting name={profile.name} />
 
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ ml: "auto" }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ ml: "auto", ...noDragSx }}>
             <HeaderClock />
             <Tooltip title={isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"} arrow>
               <IconButton
@@ -452,6 +460,7 @@ function Sidebar({ activeId, onSelect, onLogout, profile }) {
           px: 2,
           py: v(14, 2.6, 26),
           borderBottom: `1px solid ${theme.palette.app.borderSoft}`,
+          ...dragSx,
           overflow: "hidden",
           "&::before": {
             content: '""',

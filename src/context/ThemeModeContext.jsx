@@ -1,5 +1,5 @@
 //Importaciones:
-import React, { createContext, useContext, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import { getAppTheme } from "../theme/theme";
 import "@fontsource/inter";
@@ -12,6 +12,11 @@ export const ThemeModeProvider = ({ children }) => {
   const [mode, setMode] = useState(savedMode);
 
   const theme = useMemo(() => getAppTheme(mode), [mode]);
+
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", theme.palette.app.background);
+  }, [theme]);
 
   const toggleThemeMode = () => {
     setMode((prevMode) => {
