@@ -405,7 +405,6 @@ export default function Proyectos() {
             error={formError}
             maxWidth="md"
             icon={editing ? <EditRoundedIcon /> : <WorkspacesRoundedIcon />}
-            iconColor={HEX_RE.test(form.color) ? form.color : undefined}
             title={editing ? "Editar proyecto" : "Nuevo proyecto"}
             subtitle="Datos, logo, tipo, estado y color del proyecto."
             submitIcon={editing ? <EditRoundedIcon /> : <AddRoundedIcon />}
@@ -693,8 +692,8 @@ function LogoPicker({ logo, color, name, disabled, onPick, onRemove }) {
       sx={{
         p: 1.25,
         borderRadius: "16px",
-        border: `1.5px dashed ${alpha(c, theme.palette.mode === "dark" ? 0.45 : 0.32)}`,
-        bgcolor: alpha(c, theme.palette.mode === "dark" ? 0.08 : 0.05),
+        border: `1.5px dashed ${alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.4 : 0.3)}`,
+        bgcolor: softTint(theme, theme.palette.primary.main, 0.04, 0.06),
       }}
     >
       <Box
@@ -767,9 +766,9 @@ function LogoPicker({ logo, color, name, disabled, onPick, onRemove }) {
               borderRadius: "9px",
               fontWeight: 750,
               fontSize: "0.78rem",
-              color: c,
-              bgcolor: alpha(c, 0.1),
-              "&:hover": { bgcolor: alpha(c, 0.16) },
+              color: theme.palette.primary.main,
+              bgcolor: softTint(theme, theme.palette.primary.main, 0.1, 0.16),
+              "&:hover": { bgcolor: softTint(theme, theme.palette.primary.main, 0.16, 0.24) },
             }}
           >
             {logo ? "Cambiar" : "Subir logo"}
@@ -786,6 +785,10 @@ function LogoPicker({ logo, color, name, disabled, onPick, onRemove }) {
                 fontWeight: 700,
                 fontSize: "0.78rem",
                 color: theme.palette.app.secondary,
+                "&:hover": {
+                  color: theme.palette.error.main,
+                  bgcolor: alpha(theme.palette.error.main, 0.08),
+                },
               }}
             >
               Quitar

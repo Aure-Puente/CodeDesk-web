@@ -1,5 +1,5 @@
 //Tareas:
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   addDoc,
@@ -10,7 +10,7 @@ import {
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
-import { Box, InputBase, Typography } from "@mui/material";
+import { Box, InputBase, Tooltip, Typography } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import {
   DndContext,
@@ -35,6 +35,8 @@ import EventBusyRoundedIcon from "@mui/icons-material/EventBusyRounded";
 import FilterAltOffRoundedIcon from "@mui/icons-material/FilterAltOffRounded";
 import SearchOffRoundedIcon from "@mui/icons-material/SearchOffRounded";
 import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
+import UnfoldLessRoundedIcon from "@mui/icons-material/UnfoldLessRounded";
+import UnfoldMoreRoundedIcon from "@mui/icons-material/UnfoldMoreRounded";
 import ViewKanbanRoundedIcon from "@mui/icons-material/ViewKanbanRounded";
 import ViewListRoundedIcon from "@mui/icons-material/ViewListRounded";
 import { db } from "../../firebase/firebase";
@@ -88,6 +90,13 @@ const EMPTY_FORM = {
   draft: "",
 };
 const VIEW_KEY = "codedesk_tasks_view";
+const BOARD_FILTER_KEY = "codedesk_tasks_board_filter";
+const EXPANDED_KEY = "codedesk_tasks_expanded";
+const ACTIVE_COLUMNS = ["en progreso", "pendiente"];
+const BOARD_FILTERS = [
+  { value: "activas", label: "Activas" },
+  { value: "todas", label: "Todas" },
+];
 const LIST_FILTERS = [
   { value: "activas", label: "Activas" },
   { value: "todas", label: "Todas" },
@@ -103,11 +112,24 @@ const uniqueOrders = (values) =>
       (acc, value) => [...acc, acc.length && value <= acc.at(-1) ? acc.at(-1) + 0.001 : value],
       [],
     );
-const readView = () => {
+const readStorage = (key, fallback) => {
   try {
-    return localStorage.getItem(VIEW_KEY) || "board";
+    return localStorage.getItem(key) || fallback;
   } catch {
-    return "board";
+    return fallback;
+  }
+};
+const writeStorage = (key, value) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+  }
+};
+const readExpanded = () => {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(EXPANDED_KEY)) || []);
+  } catch {
+    return new Set();
   }
 };
 
@@ -121,7 +143,9 @@ const Tareas = () => {
   });
   const [projects] = useUserCollection("projects", { sort: byName });
 
-  const [view, setView] = useState(readView);
+  const [view, setView] = useState(() => readStorage(VIEW_KEY, "board"));
+  const [boardFilter, setBoardFilter] = useState(() => readStorage(BOARD_FILTER_KEY, "todas"));
+  const [expanded, setExpanded] = useState(readExpanded);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingTask, setEditingTask] = useState(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -150,11 +174,25 @@ const Tareas = () => {
 
   const changeView = (next) => {
     setView(next);
-    try {
-      localStorage.setItem(VIEW_KEY, next);
-    } catch {
-    }
+    writeStorage(VIEW_KEY, next);
   };
+  const changeBoardFilter = (next) => {
+    setBoardFilter(next);
+    writeStorage(BOARD_FILTER_KEY, next);
+  };
+
+  //Acordeones:
+  useEffect(() => {
+    const ids = [...expanded].filter((id) => loading || tasks.some((task) => task.id === id));
+    writeStorage(EXPANDED_KEY, JSON.stringify(ids));
+  }, [expanded, tasks, loading]);
+  const toggleExpanded = (id) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) || null;
   const overdueCount = useMemo(() => tasks.filter(isOverdue).length, [tasks]);
@@ -188,6 +226,18 @@ const Tareas = () => {
         .sort((a, b) => getStatusRank(a.status) - getStatusRank(b.status) || sortTasks(a, b)),
     [visibleTasks, listFilter],
   );
+
+  const boardColumns = boardFilter === "activas" ? ACTIVE_COLUMNS : BOARD_COLUMNS;
+  const shownTasks = view === "board"
+    ? visibleTasks.filter((task) => boardColumns.includes(task.status))
+    : listTasks;
+  const allExpanded = shownTasks.length > 0 && shownTasks.every((task) => expanded.has(task.id));
+  const toggleAll = () =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      shownTasks.forEach((task) => (allExpanded ? next.delete(task.id) : next.add(task.id)));
+      return next;
+    });
 
   const getEdgeOrder = (edge) => {
     const orders = tasks.map((task) => task.order ?? 0);
@@ -460,6 +510,8 @@ const Tareas = () => {
   };
 
   const cardHandlers = (task) => ({
+    expanded: expanded.has(task.id),
+    onToggleExpand: () => toggleExpanded(task.id),
     onOpen: () => setSelectedTaskId(task.id),
     onEdit: () => openForm(task),
     onDelete: () => setTaskToDelete(task),
@@ -561,18 +613,32 @@ const Tareas = () => {
               subtitle={`${visibleTasks.length} de ${tasks.length} tareas${overdueCount ? ` · ${overdueCount} vencida${overdueCount === 1 ? "" : "s"}` : ""}`}
               onReset={hasFilters ? resetFilters : undefined}
             >
-              {view === "list" && (
-                <Stack direction="row" sx={{ gap: 0.75, flexWrap: { xs: "wrap", md: "nowrap" } }}>
-                  {LIST_FILTERS.map((item) => (
+              <Stack direction="row" sx={{ gap: 0.75, flexWrap: { xs: "wrap", md: "nowrap" } }}>
+                {(view === "list" ? LIST_FILTERS : BOARD_FILTERS).map((item) => {
+                  const current = view === "list" ? listFilter : boardFilter;
+                  return (
                     <ToggleChip
                       key={item.value}
                       label={item.label}
-                      selected={listFilter === item.value}
-                      onClick={() => setListFilter(item.value)}
+                      selected={current === item.value}
+                      onClick={() =>
+                        view === "list" ? setListFilter(item.value) : changeBoardFilter(item.value)
+                      }
                     />
-                  ))}
-                </Stack>
-              )}
+                  );
+                })}
+                <Tooltip title={allExpanded ? "Contraer todas" : "Expandir todas"} describeChild>
+                  <Box sx={{ display: "flex" }}>
+                    <ToggleChip
+                      label=""
+                      icon={allExpanded ? <UnfoldLessRoundedIcon /> : <UnfoldMoreRoundedIcon />}
+                      selected={false}
+                      ariaLabel={allExpanded ? "Contraer todas" : "Expandir todas"}
+                      onClick={toggleAll}
+                    />
+                  </Box>
+                </Tooltip>
+              </Stack>
               {overdueCount > 0 && (
                 <ToggleChip
                   label={`Vencidas · ${overdueCount}`}
@@ -622,9 +688,9 @@ const Tareas = () => {
                   sx={{
                     display: "grid",
                     gridTemplateColumns: {
-                      xs: `repeat(${BOARD_COLUMNS.length}, 84%)`,
-                      sm: `repeat(${BOARD_COLUMNS.length}, 270px)`,
-                      lg: `repeat(${BOARD_COLUMNS.length}, minmax(232px, 1fr))`,
+                      xs: `repeat(${boardColumns.length}, 84%)`,
+                      sm: `repeat(${boardColumns.length}, ${boardColumns.length > 2 ? "270px" : "minmax(270px, 1fr)"})`,
+                      lg: `repeat(${boardColumns.length}, minmax(232px, 1fr))`,
                     },
                     gap: 1.5,
                     alignItems: "start",
@@ -635,7 +701,7 @@ const Tareas = () => {
                     px: { xs: 2, sm: 0 },
                   }}
                 >
-                  {BOARD_COLUMNS.map((status) => {
+                  {boardColumns.map((status) => {
                     const list = columnTasks(status);
                     const limited =
                       status === "completada" && !showAllDone && !drag
@@ -823,7 +889,7 @@ function ViewToggle({ value, onChange }) {
   );
 }
 
-function ToggleChip({ label, icon, selected, color, onClick }) {
+function ToggleChip({ label, icon, selected, color, ariaLabel, onClick }) {
   const theme = useTheme();
   const c = color || theme.palette.primary.main;
 
@@ -832,12 +898,13 @@ function ToggleChip({ label, icon, selected, color, onClick }) {
       component="button"
       type="button"
       aria-pressed={selected}
+      aria-label={ariaLabel}
       onClick={onClick}
       sx={{
         all: "unset",
         boxSizing: "border-box",
         height: 34,
-        px: 1.3,
+        px: label ? 1.3 : 0.9,
         display: "flex",
         alignItems: "center",
         gap: 0.6,

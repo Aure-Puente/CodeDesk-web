@@ -115,7 +115,7 @@ const ProjectSelect = ({
 
   return (
     <>
-      <FormControl fullWidth size={size}>
+      <FormControl fullWidth size={size} sx={{ minWidth: 0 }}>
         <InputLabel>{label}</InputLabel>
         <Select
           label={label}
@@ -125,7 +125,7 @@ const ProjectSelect = ({
           MenuProps={getMenuProps(theme)}
           sx={{
             borderRadius: "12px",
-            "& .MuiSelect-select": { display: "flex", alignItems: "center" },
+            "& .MuiSelect-select": { display: "flex", alignItems: "center", minWidth: 0, overflow: "hidden" },
           }}
         >
           {emptyLabel && (

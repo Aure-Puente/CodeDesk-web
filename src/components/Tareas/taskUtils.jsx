@@ -5,7 +5,6 @@ import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import PauseCircleRoundedIcon from "@mui/icons-material/PauseCircleRounded";
 
 export const DEFAULT_STATUS = "en progreso";
-export const CARD_CHECKLIST_LIMIT = 3;
 export const BOARD_COLUMNS = ["en progreso", "pendiente", "pausada", "completada"];
 export const DONE_PREVIEW = 6;
 

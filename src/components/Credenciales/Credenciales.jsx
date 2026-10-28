@@ -257,7 +257,7 @@ export default function Credenciales() {
             <Box
               sx={{
                 display: "grid",
-                gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+                gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
                 gap: 1.75,
                 alignItems: "start",
               }}

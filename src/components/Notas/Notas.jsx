@@ -222,7 +222,7 @@ export default function Notas() {
             <Box
               sx={{
                 display: "grid",
-                gridTemplateColumns: { xs: "1fr", sm: "1.4fr 1fr" },
+                gridTemplateColumns: { xs: "1fr", sm: "minmax(0, 1.4fr) minmax(0, 1fr)" },
                 gap: 1.75,
               }}
             >

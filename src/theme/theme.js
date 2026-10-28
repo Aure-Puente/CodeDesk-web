@@ -183,6 +183,29 @@ export const getAppTheme = (mode = "light") => {
             boxShadow: "none",
           },
         },
+        variants: isDark
+          ? [
+              {
+                props: { variant: "contained", color: "primary" },
+                style: {
+                  color: "#A9C8FF",
+                  backgroundColor: "rgba(76, 141, 246, 0.18)",
+                  border: "1px solid rgba(76, 141, 246, 0.38)",
+                  boxShadow: "none",
+                  "&:hover": {
+                    backgroundColor: "rgba(76, 141, 246, 0.27)",
+                    borderColor: "rgba(76, 141, 246, 0.55)",
+                    boxShadow: "none",
+                  },
+                  "&.Mui-disabled": {
+                    color: "rgba(169, 200, 255, 0.4)",
+                    backgroundColor: "rgba(76, 141, 246, 0.08)",
+                    borderColor: "rgba(76, 141, 246, 0.16)",
+                  },
+                },
+              },
+            ]
+          : [],
       },
 
       MuiChip: {

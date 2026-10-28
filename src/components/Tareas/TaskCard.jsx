@@ -4,6 +4,7 @@ import {
   Box,
   Card,
   Checkbox,
+  Collapse,
   Divider,
   IconButton,
   InputBase,
@@ -23,12 +24,13 @@ import ChecklistRoundedIcon from "@mui/icons-material/ChecklistRounded";
 import DeleteRoundedIcon from "@mui/icons-material/DeleteRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import EventRoundedIcon from "@mui/icons-material/EventRounded";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import FlagRoundedIcon from "@mui/icons-material/FlagRounded";
 import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
+import OpenInFullRoundedIcon from "@mui/icons-material/OpenInFullRounded";
 import VerticalAlignTopRoundedIcon from "@mui/icons-material/VerticalAlignTopRounded";
 import { ProjectAvatar, Stack, getCardStyles, getSoftBackground, softTint } from "../../shared/ui";
 import {
-  CARD_CHECKLIST_LIMIT,
   PRIORITIES,
   PRIORITY,
   STATUSES,
@@ -413,6 +415,12 @@ const TaskMenu = ({ task, onEdit, onOpen, onDelete, onSetPriority, onSetStatus, 
           },
         }}
       >
+        <MenuItem onClick={run(onOpen)}>
+          <ListItemIcon>
+            <OpenInFullRoundedIcon />
+          </ListItemIcon>
+          Ver detalle
+        </MenuItem>
         <MenuItem onClick={run(onEdit)}>
           <ListItemIcon>
             <EditRoundedIcon />
@@ -488,12 +496,55 @@ const TaskMenu = ({ task, onEdit, onOpen, onDelete, onSetPriority, onSetStatus, 
   );
 };
 
+const CompactIndicators = ({ task, checklist, isDone }) => {
+  const theme = useTheme();
+  const due = getDueInfo(task);
+  const { total, done, allDone } = getChecklistProgress(checklist);
+  const dueColor = due && getDueColor(theme, due.tone);
+  const showDue = due && !isDone && (due.tone === "overdue" || due.tone === "today");
+
+  return (
+    <>
+      {showDue && (
+        <Tooltip title={due.label}>
+          <EventRoundedIcon sx={{ fontSize: 15, color: dueColor }} />
+        </Tooltip>
+      )}
+      {total > 0 && (
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={0.3}
+          sx={{
+            flexShrink: 0,
+            height: 20,
+            px: 0.6,
+            borderRadius: "6px",
+            fontSize: "0.68rem",
+            fontWeight: 800,
+            color: allDone ? theme.palette.success.main : theme.palette.app.secondary,
+            bgcolor: getSoftBackground(theme),
+            "& svg": { fontSize: 13 },
+          }}
+        >
+          <ChecklistRoundedIcon />
+          <span>
+            {done}/{total}
+          </span>
+        </Stack>
+      )}
+    </>
+  );
+};
+
 export const TaskCardView = ({
   task,
   showStatus = false,
   dragging = false,
   overlay = false,
+  expanded = false,
   dragProps,
+  onToggleExpand,
   onOpen,
   onEdit,
   onDelete,
@@ -510,23 +561,26 @@ export const TaskCardView = ({
   const due = getDueInfo(task);
   const priority = PRIORITY[task.priority];
   const accent = getPriorityColor(theme, task.priority);
+  const open = expanded && !overlay;
+  const hasMeta = showStatus || priority || due;
 
   return (
     <Card
       elevation={0}
-      onClick={onOpen}
+      onClick={onToggleExpand || onOpen}
       {...dragProps}
       sx={{
         ...getCardStyles(theme, "14px"),
         position: "relative",
         overflow: "hidden",
-        p: isDone ? 1.1 : 1.4,
-        pl: isDone ? 1.3 : 1.6,
+        p: 1.2,
+        pl: 1.5,
         cursor: overlay ? "grabbing" : "pointer",
         touchAction: "manipulation",
         userSelect: "none",
         opacity: dragging ? 0.35 : 1,
         transition: "border-color 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease",
+        ...(open && { borderColor: alpha(theme.palette.primary.main, 0.3) }),
         "&::before": {
           content: '""',
           position: "absolute",
@@ -554,8 +608,8 @@ export const TaskCardView = ({
         "&:hover .task-menu": { opacity: 1 },
       }}
     >
-      {/* Proyecto + menú */}
-      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.75, minHeight: 26 }}>
+      {/* Proyecto + indicadores + menú */}
+      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.6, minHeight: 26 }}>
         {task.projectId ? (
           <ProjectAvatar item={task} size={18} fontSize={9} sx={{ border: "none" }} />
         ) : null}
@@ -571,6 +625,7 @@ export const TaskCardView = ({
         >
           {task.projectName || "Personal"}
         </Typography>
+        {!open && <CompactIndicators task={task} checklist={checklist} isDone={isDone} />}
         <Box
           className="task-menu"
           sx={{ opacity: { xs: 1, md: overlay ? 1 : 0.55 }, transition: "opacity 0.16s ease" }}
@@ -587,7 +642,7 @@ export const TaskCardView = ({
         </Box>
       </Stack>
 
-      {/* Check + título */}
+      {/* Check + título + flecha */}
       <Stack direction="row" alignItems="flex-start" spacing={1}>
         <DoneToggle done={isDone} onToggle={onToggleDone} />
         <Typography
@@ -599,87 +654,129 @@ export const TaskCardView = ({
             fontWeight: 750,
             lineHeight: 1.35,
             textDecoration: isDone ? "line-through" : "none",
-            overflowWrap: "anywhere",
-            display: "-webkit-box",
-            WebkitLineClamp: 3,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
+            ...(open
+              ? { overflowWrap: "anywhere" }
+              : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }),
           }}
         >
           {task.title || "Tarea sin título"}
         </Typography>
+        {onToggleExpand && (
+          <ExpandMoreRoundedIcon
+            aria-hidden
+            sx={{
+              flexShrink: 0,
+              mt: "1px",
+              fontSize: 20,
+              color: theme.palette.app.secondary,
+              transform: open ? "rotate(180deg)" : "none",
+              transition: "transform 0.2s ease",
+            }}
+          />
+        )}
       </Stack>
 
-      {task.description && !isDone && (
-        <Typography
-          sx={{
-            mt: 0.5,
-            pl: 3.5,
-            color: theme.palette.app.secondary,
-            fontSize: "0.78rem",
-            lineHeight: 1.5,
-            fontWeight: 500,
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-          }}
-        >
-          {task.description}
-        </Typography>
-      )}
+      {/* Detalle desplegable */}
+      <Collapse in={open} timeout={200} unmountOnExit>
+        <Box sx={{ pl: 3.5, pt: 0.75 }}>
+          {task.description && (
+            <Typography
+              sx={{
+                color: theme.palette.app.secondary,
+                fontSize: "0.8rem",
+                lineHeight: 1.55,
+                fontWeight: 500,
+                whiteSpace: "pre-line",
+                overflowWrap: "anywhere",
+                display: "-webkit-box",
+                WebkitLineClamp: 6,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }}
+            >
+              {task.description}
+            </Typography>
+          )}
 
-      {/* Checklist */}
-      {checklist.length > 0 && !isDone && (
-        <Box sx={{ mt: 1, pl: 2.6 }}>
-          {
-            <>
+          {checklist.length > 0 && (
+            <Box sx={{ mt: task.description ? 1 : 0, ml: -0.9 }}>
               <Box sx={{ pl: 0.9, pr: 0.25, mb: 0.4 }}>
                 <ChecklistProgress checklist={checklist} />
               </Box>
-              {!isDone && (
-                <ChecklistItems
-                  checklist={checklist}
-                  onToggle={onToggleChecklistItem}
-                  limit={CARD_CHECKLIST_LIMIT}
-                  dense
+              <ChecklistItems checklist={checklist} onToggle={onToggleChecklistItem} dense />
+            </Box>
+          )}
+
+          {!isDone && onAddChecklist && (
+            <Box sx={{ ml: -0.75, mt: checklist.length ? 0 : 0.25 }}>
+              <InlineChecklistAdd onAdd={onAddChecklist} dense />
+            </Box>
+          )}
+
+          {(hasMeta || onOpen) && (
+            <Stack
+              direction="row"
+              alignItems="center"
+              sx={{ mt: 1, flexWrap: "wrap", gap: 0.6 }}
+            >
+              {showStatus && (
+                <MetaPill
+                  icon={getStatusIcon(task.status)}
+                  label={getStatusLabel(task.status)}
+                  color={getStatusColor(theme, task.status)}
                 />
               )}
-            </>
-          }
-          {!isDone && onAddChecklist && <InlineChecklistAdd onAdd={onAddChecklist} dense />}
+              {priority && !isDone && (
+                <MetaPill
+                  icon={<FlagRoundedIcon />}
+                  label={priority.label}
+                  color={priority.color(theme)}
+                />
+              )}
+              {due && !isDone && (
+                <MetaPill
+                  icon={<EventRoundedIcon />}
+                  label={due.label}
+                  color={getDueColor(theme, due.tone)}
+                />
+              )}
+              {onOpen && (
+                <Box
+                  component="button"
+                  type="button"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onOpen();
+                  }}
+                  sx={{
+                    all: "unset",
+                    ml: "auto",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 0.3,
+                    px: 0.75,
+                    py: 0.3,
+                    borderRadius: "7px",
+                    cursor: "pointer",
+                    fontSize: "0.74rem",
+                    fontWeight: 750,
+                    color: theme.palette.app.secondary,
+                    "& svg": { fontSize: 15 },
+                    "&:hover": {
+                      color: theme.palette.primary.main,
+                      bgcolor: theme.palette.app.primarySoft,
+                    },
+                  }}
+                >
+                  <OpenInFullRoundedIcon />
+                  Ver detalle
+                </Box>
+              )}
+            </Stack>
+          )}
         </Box>
-      )}
-
-      {(showStatus || ((priority || due) && !isDone)) && (
-        <Stack
-          direction="row"
-          alignItems="center"
-          sx={{ mt: 1, pl: 3.5, flexWrap: "wrap", gap: 0.6 }}
-        >
-          {showStatus && (
-            <MetaPill
-              icon={getStatusIcon(task.status)}
-              label={getStatusLabel(task.status)}
-              color={getStatusColor(theme, task.status)}
-            />
-          )}
-          {priority && !isDone && (
-            <MetaPill
-              icon={<FlagRoundedIcon />}
-              label={priority.label}
-              color={priority.color(theme)}
-            />
-          )}
-          {due && !isDone && (
-            <MetaPill
-              icon={<EventRoundedIcon />}
-              label={due.label}
-              color={getDueColor(theme, due.tone)}
-            />
-          )}
-        </Stack>
-      )}
+      </Collapse>
     </Card>
   );
 };

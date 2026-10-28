@@ -39,8 +39,8 @@ import VpnKeyRoundedIcon from "@mui/icons-material/VpnKeyRounded";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import logoIcon from "../../assets/images/logo-icon.png";
-import logoFullDark from "../../assets/images/logo-full-dark.png";
-import logoFullLight from "../../assets/images/logo-full-light.png";
+import logoSidebarDark from "../../assets/images/logo-sidebar-dark.png";
+import logoSidebarLight from "../../assets/images/logo-sidebar-light.png";
 import { useThemeMode } from "../../context/ThemeModeContext";
 import { useAuth } from "../../context/AuthContext";
 import { db, storage } from "../../firebase/firebase";
@@ -466,11 +466,11 @@ function Sidebar({ activeId, onSelect, onLogout, profile }) {
       >
         <Box
           component="img"
-          src={isDark ? logoFullDark : logoFullLight}
+          src={isDark ? logoSidebarDark : logoSidebarLight}
           alt="CodeDesk"
           sx={{
             position: "relative",
-            width: v(130, 24, 184),
+            width: v(82, 15.1, 116),
             height: "auto",
             display: "block",
             filter: `drop-shadow(0 10px 22px ${alpha(theme.palette.primary.main, isDark ? 0.35 : 0.22)})`,

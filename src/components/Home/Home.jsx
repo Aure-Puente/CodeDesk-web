@@ -1,10 +1,21 @@
 //Home:
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { Box, Button, Card, LinearProgress, Skeleton, Tooltip, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  Card,
+  IconButton,
+  InputBase,
+  LinearProgress,
+  Skeleton,
+  Typography,
+} from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
+import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import AssignmentRoundedIcon from "@mui/icons-material/AssignmentRounded";
+import ChecklistRoundedIcon from "@mui/icons-material/ChecklistRounded";
 import EventBusyRoundedIcon from "@mui/icons-material/EventBusyRounded";
 import EventRoundedIcon from "@mui/icons-material/EventRounded";
 import KeyRoundedIcon from "@mui/icons-material/KeyRounded";
@@ -39,6 +50,7 @@ import {
   getStatusRank,
   isOverdue,
   sortTasks,
+  textToChecklistItems,
 } from "../Tareas/taskUtils";
 import logoIcon from "../../assets/images/logo-icon.png";
 
@@ -143,6 +155,11 @@ const Home = ({ onNavigate }) => {
     });
   };
 
+  const addItems = (task, text) => {
+    const items = textToChecklistItems(text);
+    if (items.length) updateTask(task, { checklist: [...getChecklist(task), ...items] });
+  };
+
   if (loading) return <HomeSkeleton />;
 
   const isEmpty = !tasks.length && !projects.length && !payments.length && !notes.length;
@@ -174,6 +191,7 @@ const Home = ({ onNavigate }) => {
               project={focusProject}
               next={openTasks[1]}
               onToggleItem={(itemId) => toggleItem(focus, itemId)}
+              onAddItems={(text) => addItems(focus, text)}
               onComplete={() => completeTask(focus)}
               onGo={() => go("tareas")}
             />
@@ -563,7 +581,7 @@ function Panel({ title, subtitle, icon, iconColor, onMore, children }) {
   );
 }
 
-function FocusCard({ task, project, next, onToggleItem, onComplete, onGo }) {
+function FocusCard({ task, project, next, onToggleItem, onAddItems, onComplete, onGo }) {
   const theme = useTheme();
   const color = task?.projectColor || project?.color || theme.palette.primary.main;
   const checklist = getChecklist(task);
@@ -591,7 +609,6 @@ function FocusCard({ task, project, next, onToggleItem, onComplete, onGo }) {
         alignItems={{ xs: "flex-start", sm: "stretch" }}
         sx={{ height: "100%" }}
       >
-        {/* Logo grande del proyecto  */}
         <Box sx={{ flexShrink: 0 }}>
           {task?.projectId ? (
             <ProjectAvatar
@@ -706,6 +723,8 @@ function FocusCard({ task, project, next, onToggleItem, onComplete, onGo }) {
             </Box>
           )}
 
+          {task && !progress.total && <EmptyChecklist onAdd={onAddItems} />}
+
           <Box sx={{ flex: 1, minHeight: 12 }} />
 
           <Stack
@@ -715,46 +734,7 @@ function FocusCard({ task, project, next, onToggleItem, onComplete, onGo }) {
             sx={{ pt: 1.5, borderTop: `1px solid ${alpha(color, 0.15)}` }}
           >
             <Stack direction="row" alignItems="center" spacing={0.9} sx={{ flex: 1, minWidth: 0 }}>
-              {next && (
-                <>
-                  <Typography
-                    sx={{
-                      flexShrink: 0,
-                      fontSize: "0.7rem",
-                      fontWeight: 800,
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      color: theme.palette.app.secondary,
-                    }}
-                  >
-                    Siguiente
-                  </Typography>
-                  <Tooltip title={next.projectName || "Tarea personal"} arrow>
-                    <Box sx={{ display: "flex", flexShrink: 0 }}>
-                      <ProjectAvatar
-                        item={next.projectId ? next : null}
-                        size={24}
-                        fontSize={11}
-                        sx={{
-                          border: "none",
-                          boxShadow: `0 4px 10px ${alpha(next.projectColor || theme.palette.primary.main, 0.25)}`,
-                        }}
-                      />
-                    </Box>
-                  </Tooltip>
-                  <Typography
-                    noWrap
-                    sx={{
-                      minWidth: 0,
-                      fontSize: "0.84rem",
-                      fontWeight: 750,
-                      color: theme.palette.app.text,
-                    }}
-                  >
-                    {next.title}
-                  </Typography>
-                </>
-              )}
+              {next && <NextUp task={next} />}
             </Stack>
             <Stack direction="row" spacing={1}>
               {task && (
@@ -795,6 +775,155 @@ function FocusCard({ task, project, next, onToggleItem, onComplete, onGo }) {
         </Stack>
       </Stack>
     </Card>
+  );
+}
+
+function EmptyChecklist({ onAdd }) {
+  const theme = useTheme();
+  const color = theme.palette.primary.main;
+  const [text, setText] = useState("");
+  const submit = () => {
+    if (!text.trim()) return;
+    onAdd(text);
+    setText("");
+  };
+
+  return (
+    <Box
+      sx={{
+        mt: 1.75,
+        p: { xs: 1.5, md: 1.75 },
+        borderRadius: "16px",
+        border: `1px dashed ${alpha(color, 0.3)}`,
+        backgroundColor: softTint(theme, color, 0.03, 0.04),
+      }}
+    >
+      <Stack direction="row" alignItems="center" spacing={1.25}>
+        <Box
+          sx={{
+            width: 36,
+            height: 36,
+            flexShrink: 0,
+            borderRadius: "11px",
+            display: "grid",
+            placeItems: "center",
+            color,
+            backgroundColor: theme.palette.app.primarySoft,
+            "& svg": { fontSize: 20 },
+          }}
+        >
+          <ChecklistRoundedIcon />
+        </Box>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontSize: "0.88rem", fontWeight: 800, color: theme.palette.app.text }}>
+            Esta tarea no tiene checklist
+          </Typography>
+          <Typography sx={{ fontSize: "0.78rem", fontWeight: 550, color: theme.palette.app.secondary }}>
+            Dividila en pasos chicos y seguí el avance desde acá.
+          </Typography>
+        </Box>
+      </Stack>
+
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={0.75}
+        sx={{
+          mt: 1.4,
+          pl: 1.5,
+          pr: 0.5,
+          height: 40,
+          borderRadius: "12px",
+          backgroundColor: getSoftBackground(theme),
+          border: `1px solid ${theme.palette.app.borderSoft}`,
+          transition: "border-color 0.2s ease",
+          "&:focus-within": { borderColor: alpha(color, 0.6) },
+        }}
+      >
+        <InputBase
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => event.key === "Enter" && submit()}
+          onPaste={(event) => {
+            const pasted = event.clipboardData.getData("text");
+            if (!pasted.includes("\n")) return;
+            event.preventDefault();
+            onAdd(pasted);
+          }}
+          placeholder="Agregar primer paso y presionar Enter"
+          inputProps={{ "aria-label": "Agregar paso al checklist" }}
+          sx={{ flex: 1, fontSize: "0.84rem", color: theme.palette.app.text }}
+        />
+        <IconButton
+          size="small"
+          aria-label="Agregar paso"
+          onClick={submit}
+          disabled={!text.trim()}
+          sx={{
+            width: 30,
+            height: 30,
+            borderRadius: "9px",
+            color,
+            backgroundColor: theme.palette.app.primarySoft,
+            "&:hover": { backgroundColor: softTint(theme, color, 0.16, 0.24) },
+          }}
+        >
+          <AddRoundedIcon fontSize="small" />
+        </IconButton>
+      </Stack>
+    </Box>
+  );
+}
+
+function NextUp({ task }) {
+  const theme = useTheme();
+  const color = task.projectColor || theme.palette.primary.main;
+
+  return (
+    <Stack
+      direction="row"
+      alignItems="center"
+      spacing={1.1}
+      sx={{
+        minWidth: 0,
+        maxWidth: { xs: "100%", sm: 340 },
+        py: 0.6,
+        pl: 0.6,
+        pr: 1.5,
+        borderRadius: "13px",
+        backgroundColor: getSoftBackground(theme),
+        border: `1px solid ${theme.palette.app.borderSoft}`,
+      }}
+    >
+      <ProjectAvatar
+        item={task.projectId ? task : null}
+        size={30}
+        fontSize={13}
+        radius="9px"
+        sx={{ border: "none", boxShadow: `0 4px 12px ${alpha(color, 0.25)}` }}
+      />
+      <Box sx={{ minWidth: 0 }}>
+        <Typography
+          noWrap
+          sx={{
+            fontSize: "0.64rem",
+            fontWeight: 800,
+            letterSpacing: "0.07em",
+            textTransform: "uppercase",
+            color: theme.palette.app.secondary,
+            lineHeight: 1.3,
+          }}
+        >
+          Siguiente · {task.projectName || "Personal"}
+        </Typography>
+        <Typography
+          noWrap
+          sx={{ fontSize: "0.84rem", fontWeight: 750, color: theme.palette.app.text, lineHeight: 1.3 }}
+        >
+          {task.title}
+        </Typography>
+      </Box>
+    </Stack>
   );
 }
 

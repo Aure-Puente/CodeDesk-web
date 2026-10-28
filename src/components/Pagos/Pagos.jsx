@@ -479,7 +479,7 @@ export default function Pagos() {
             <Box
               sx={{
                 display: "grid",
-                gridTemplateColumns: { xs: "1fr", sm: "1.3fr 1fr" },
+                gridTemplateColumns: { xs: "1fr", sm: "minmax(0, 1.3fr) minmax(0, 1fr)" },
                 gap: 1.75,
               }}
             >
