@@ -731,7 +731,12 @@ const Tareas = () => {
                           strategy={verticalListSortingStrategy}
                         >
                           {limited.map((task) => (
-                            <TaskCard key={task.id} task={task} {...cardHandlers(task)} />
+                            <TaskCard
+                              key={task.id}
+                              task={task}
+                              large={boardColumns.length <= 2}
+                              {...cardHandlers(task)}
+                            />
                           ))}
                         </SortableContext>
                       </BoardColumn>
@@ -741,7 +746,9 @@ const Tareas = () => {
 
                 {createPortal(
                   <DragOverlay dropAnimation={{ duration: 180 }}>
-                    {activeTask ? <TaskCardView task={activeTask} overlay /> : null}
+                    {activeTask ? (
+                      <TaskCardView task={activeTask} large={boardColumns.length <= 2} overlay />
+                    ) : null}
                   </DragOverlay>,
                   document.body,
                 )}

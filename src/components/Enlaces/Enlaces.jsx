@@ -63,7 +63,6 @@ const getType = (type) => LINK_TYPES[type] || LINK_TYPES.Web;
 const dateValue = (item) => item.createdAt?.seconds || item.updatedAt?.seconds || 0;
 const EMPTY_FORM = { projectId: "", type: "Web", url: "", notes: "" };
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-const CARD_PREVIEW = 3; 
 
 const matchesSearch = (link, query) =>
   !query ||
@@ -449,7 +448,7 @@ export default function Enlaces() {
                     xl: "repeat(3, minmax(0, 1fr))",
                   },
                   gap: { xs: 1.5, md: 1.75 },
-                  alignItems: "start",
+                  alignItems: "stretch",
                 }}
               >
                 {groups.map((group, index) => (
@@ -582,7 +581,8 @@ function ProjectLinksCard({ group, delay, onOpen, onAdd, onOpenLink }) {
   const counts = Object.keys(LINK_TYPES)
     .map((type) => [type, group.links.filter((item) => (item.type || "Web") === type).length])
     .filter(([, count]) => count > 0);
-  const extra = group.links.length - CARD_PREVIEW;
+  const [first] = group.links;
+  const total = group.links.length;
 
   return (
     <Card
@@ -592,6 +592,9 @@ function ProjectLinksCard({ group, delay, onOpen, onAdd, onOpenLink }) {
         ...getCardStyles(theme, "18px"),
         ...getSoftFadeSx(delay),
         p: { xs: 1.6, md: 1.75 },
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
         cursor: "pointer",
         transition: "transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease",
         "&:hover": {
@@ -627,50 +630,48 @@ function ProjectLinksCard({ group, delay, onOpen, onAdd, onOpenLink }) {
         </IconAction>
       </Stack>
 
-      <Stack spacing={0.75} sx={{ mt: 1.5 }}>
-        {group.links.slice(0, CARD_PREVIEW).map((link) => (
-          <Stack
-            key={link.id}
-            direction="row"
-            alignItems="center"
-            spacing={1.1}
-            sx={{
-              pl: 0.9,
-              pr: 0.6,
-              py: 0.7,
-              borderRadius: "12px",
-              bgcolor: getSoftBackground(theme),
-              border: `1px solid ${theme.palette.app.borderSoft}`,
-            }}
-          >
-            <TypeBadge type={link.type} size={28} />
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography
-                noWrap
-                sx={{ color: theme.palette.app.text, fontSize: "0.82rem", fontWeight: 650 }}
-              >
-                {link.notes?.trim() || getShortUrl(link.url)}
-              </Typography>
-              {link.notes?.trim() && (
-                <Typography
-                  noWrap
-                  sx={{ color: theme.palette.app.secondary, fontSize: "0.72rem", fontWeight: 550 }}
-                >
-                  {getShortUrl(link.url)}
-                </Typography>
-              )}
-            </Box>
-            <IconAction
-              title="Abrir enlace"
-              size={28}
-              color={theme.palette.app.secondary}
-              onClick={() => onOpenLink(link.url)}
+      {first && (
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1.1}
+          sx={{
+            mt: 1.5,
+            pl: 0.9,
+            pr: 0.6,
+            py: 0.7,
+            borderRadius: "12px",
+            bgcolor: getSoftBackground(theme),
+            border: `1px solid ${theme.palette.app.borderSoft}`,
+          }}
+        >
+          <TypeBadge type={first.type} size={28} />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography
+              noWrap
+              sx={{ color: theme.palette.app.text, fontSize: "0.82rem", fontWeight: 650 }}
             >
-              <OpenInNewRoundedIcon sx={{ fontSize: 15 }} />
-            </IconAction>
-          </Stack>
-        ))}
-      </Stack>
+              {first.notes?.trim() || getType(first.type).hint}
+            </Typography>
+            <Typography
+              noWrap
+              sx={{ color: theme.palette.app.secondary, fontSize: "0.72rem", fontWeight: 550 }}
+            >
+              {getShortUrl(first.url)}
+            </Typography>
+          </Box>
+          <IconAction
+            title="Abrir enlace"
+            size={28}
+            color={theme.palette.app.secondary}
+            onClick={() => onOpenLink(first.url)}
+          >
+            <OpenInNewRoundedIcon sx={{ fontSize: 15 }} />
+          </IconAction>
+        </Stack>
+      )}
+
+      <Box sx={{ flex: 1 }} />
 
       <Stack
         direction="row"
@@ -678,14 +679,34 @@ function ProjectLinksCard({ group, delay, onOpen, onAdd, onOpenLink }) {
         justifyContent="space-between"
         sx={{
           mt: 1.25,
+          minHeight: 20,
           color: theme.palette.app.secondary,
           "&:hover": { color: theme.palette.primary.main },
         }}
       >
         <Typography sx={{ fontSize: "0.75rem", fontWeight: 700, color: "inherit" }}>
-          {extra > 0 ? `Ver ${plural(extra, "enlace más", "enlaces más")}` : "Ver y administrar"}
+          {total > 1 ? `Ver los ${total} enlaces` : "Ver y administrar"}
         </Typography>
-        <ArrowForwardRoundedIcon sx={{ fontSize: 17 }} />
+        <Stack direction="row" alignItems="center" spacing={0.6}>
+          {total > 1 && (
+            <Box
+              sx={{
+                px: 0.75,
+                height: 20,
+                display: "grid",
+                placeItems: "center",
+                borderRadius: "7px",
+                fontSize: "0.7rem",
+                fontWeight: 800,
+                color: theme.palette.primary.main,
+                bgcolor: theme.palette.app.primarySoft,
+              }}
+            >
+              +{total - 1}
+            </Box>
+          )}
+          <ArrowForwardRoundedIcon sx={{ fontSize: 17 }} />
+        </Stack>
       </Stack>
     </Card>
   );

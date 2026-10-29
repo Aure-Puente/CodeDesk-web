@@ -543,6 +543,7 @@ export const TaskCardView = ({
   dragging = false,
   overlay = false,
   expanded = false,
+  large = false,
   dragProps,
   onToggleExpand,
   onOpen,
@@ -563,6 +564,9 @@ export const TaskCardView = ({
   const accent = getPriorityColor(theme, task.priority);
   const open = expanded && !overlay;
   const hasMeta = showStatus || priority || due;
+  const ui = large
+    ? { pad: 1.6, padLeft: 1.9, avatar: 22, project: "0.78rem", title: "1.02rem", toggle: 23, indent: 4, body: "0.86rem" }
+    : { pad: 1.2, padLeft: 1.5, avatar: 18, project: "0.72rem", title: "0.9rem", toggle: 20, indent: 3.5, body: "0.8rem" };
 
   return (
     <Card
@@ -573,8 +577,8 @@ export const TaskCardView = ({
         ...getCardStyles(theme, "14px"),
         position: "relative",
         overflow: "hidden",
-        p: 1.2,
-        pl: 1.5,
+        p: ui.pad,
+        pl: ui.padLeft,
         cursor: overlay ? "grabbing" : "pointer",
         touchAction: "manipulation",
         userSelect: "none",
@@ -611,14 +615,19 @@ export const TaskCardView = ({
       {/* Proyecto + indicadores + menú */}
       <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.6, minHeight: 26 }}>
         {task.projectId ? (
-          <ProjectAvatar item={task} size={18} fontSize={9} sx={{ border: "none" }} />
+          <ProjectAvatar
+            item={task}
+            size={ui.avatar}
+            fontSize={ui.avatar / 2}
+            sx={{ border: "none" }}
+          />
         ) : null}
         <Typography
           noWrap
           sx={{
             flex: 1,
             minWidth: 0,
-            fontSize: "0.72rem",
+            fontSize: ui.project,
             fontWeight: 700,
             color: theme.palette.app.secondary,
           }}
@@ -644,13 +653,13 @@ export const TaskCardView = ({
 
       {/* Check + título + flecha */}
       <Stack direction="row" alignItems="flex-start" spacing={1}>
-        <DoneToggle done={isDone} onToggle={onToggleDone} />
+        <DoneToggle done={isDone} onToggle={onToggleDone} size={ui.toggle} />
         <Typography
           sx={{
             flex: 1,
             minWidth: 0,
             color: isDone ? theme.palette.app.secondary : theme.palette.app.text,
-            fontSize: "0.9rem",
+            fontSize: ui.title,
             fontWeight: 750,
             lineHeight: 1.35,
             textDecoration: isDone ? "line-through" : "none",
@@ -678,12 +687,12 @@ export const TaskCardView = ({
 
       {/* Detalle desplegable */}
       <Collapse in={open} timeout={200} unmountOnExit>
-        <Box sx={{ pl: 3.5, pt: 0.75 }}>
+        <Box sx={{ pl: ui.indent, pt: 0.75 }}>
           {task.description && (
             <Typography
               sx={{
                 color: theme.palette.app.secondary,
-                fontSize: "0.8rem",
+                fontSize: ui.body,
                 lineHeight: 1.55,
                 fontWeight: 500,
                 whiteSpace: "pre-line",
@@ -703,13 +712,13 @@ export const TaskCardView = ({
               <Box sx={{ pl: 0.9, pr: 0.25, mb: 0.4 }}>
                 <ChecklistProgress checklist={checklist} />
               </Box>
-              <ChecklistItems checklist={checklist} onToggle={onToggleChecklistItem} dense />
+              <ChecklistItems checklist={checklist} onToggle={onToggleChecklistItem} dense={!large} />
             </Box>
           )}
 
           {!isDone && onAddChecklist && (
             <Box sx={{ ml: -0.75, mt: checklist.length ? 0 : 0.25 }}>
-              <InlineChecklistAdd onAdd={onAddChecklist} dense />
+              <InlineChecklistAdd onAdd={onAddChecklist} dense={!large} />
             </Box>
           )}
 
