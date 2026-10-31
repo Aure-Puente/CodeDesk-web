@@ -562,11 +562,13 @@ export const TaskCardView = ({
   const due = getDueInfo(task);
   const priority = PRIORITY[task.priority];
   const accent = getPriorityColor(theme, task.priority);
+  const projectColor = task.projectColor || theme.palette.primary.main;
+  const isDark = theme.palette.mode === "dark";
   const open = expanded && !overlay;
   const hasMeta = showStatus || priority || due;
   const ui = large
-    ? { pad: 1.6, padLeft: 1.9, avatar: 22, project: "0.78rem", title: "1.02rem", toggle: 23, indent: 4, body: "0.86rem" }
-    : { pad: 1.2, padLeft: 1.5, avatar: 18, project: "0.72rem", title: "0.9rem", toggle: 20, indent: 3.5, body: "0.8rem" };
+    ? { pad: 1.6, padLeft: 1.9, avatar: 30, project: "0.82rem", title: "1.02rem", toggle: 23, indent: 4, body: "0.86rem" }
+    : { pad: 1.2, padLeft: 1.5, avatar: 24, project: "0.75rem", title: "0.9rem", toggle: 20, indent: 3.5, body: "0.8rem" };
 
   return (
     <Card
@@ -583,8 +585,9 @@ export const TaskCardView = ({
         touchAction: "manipulation",
         userSelect: "none",
         opacity: dragging ? 0.35 : 1,
-        transition: "border-color 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease",
-        ...(open && { borderColor: alpha(theme.palette.primary.main, 0.3) }),
+        transition:
+          "transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.16s ease",
+        ...(open && { borderColor: alpha(projectColor, 0.35) }),
         "&::before": {
           content: '""',
           position: "absolute",
@@ -602,24 +605,25 @@ export const TaskCardView = ({
               : "0 24px 50px rgba(15,23,42,0.2)",
           borderColor: alpha(theme.palette.primary.main, 0.45),
         }),
-        "&:hover": {
-          borderColor: alpha(theme.palette.primary.main, 0.35),
-          boxShadow:
-            theme.palette.mode === "dark"
-              ? "0 10px 26px rgba(0,0,0,0.3)"
-              : "0 10px 24px rgba(15,23,42,0.08)",
-        },
+        "&:hover": overlay
+          ? {}
+          : {
+              transform: "translateY(-2px)",
+              borderColor: alpha(projectColor, 0.45),
+              boxShadow: `0 14px 34px ${alpha(projectColor, isDark ? 0.18 : 0.12)}`,
+            },
         "&:hover .task-menu": { opacity: 1 },
       }}
     >
       {/* Proyecto + indicadores + menú */}
-      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.6, minHeight: 26 }}>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75, minHeight: 26 }}>
         {task.projectId ? (
           <ProjectAvatar
             item={task}
             size={ui.avatar}
             fontSize={ui.avatar / 2}
-            sx={{ border: "none" }}
+            radius={`${Math.round(ui.avatar * 0.3)}px`}
+            sx={{ border: "none", boxShadow: `0 4px 12px ${alpha(projectColor, 0.22)}` }}
           />
         ) : null}
         <Typography
