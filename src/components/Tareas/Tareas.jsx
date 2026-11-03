@@ -1074,6 +1074,9 @@ function BoardColumn({ status, count, onQuickAdd, footer, children }) {
           overflowY: { md: "auto" },
           mx: -0.5,
           px: 0.5,
+          //Lugar para que el brillo del hover no se corte arriba:
+          mt: -0.75,
+          pt: 0.75,
           pb: 0.25,
           scrollbarWidth: "thin",
           scrollbarColor: "transparent transparent",
