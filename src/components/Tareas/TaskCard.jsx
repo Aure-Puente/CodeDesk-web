@@ -15,7 +15,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { alpha, useTheme } from "@mui/material/styles";
+import { alpha, keyframes, useTheme } from "@mui/material/styles";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
@@ -311,7 +311,13 @@ export const InlineChecklistAdd = ({ onAdd, dense = false }) => {
   );
 };
 
-export const DoneToggle = ({ done, onToggle, size = 20 }) => {
+const pop = keyframes`
+  0% { transform: scale(0.55); }
+  60% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+`;
+
+export const DoneToggle = ({ done, onToggle, size = 20, celebrate = false }) => {
   const theme = useTheme();
   const color = theme.palette.success.main;
 
@@ -342,6 +348,7 @@ export const DoneToggle = ({ done, onToggle, size = 20 }) => {
           transition: "all 0.16s ease",
           "& svg": { fontSize: size * 0.7 },
           "&:hover": { borderColor: color, color: done ? "#fff" : color },
+          ...(celebrate && { animation: `${pop} 0.42s cubic-bezier(0.34, 1.56, 0.64, 1)` }),
         }}
       >
         <CheckRoundedIcon />
@@ -557,9 +564,11 @@ export const TaskCardView = ({
   onSetPriority,
   onSetStatus,
   onMoveTop,
+  completing = false,
+  leaving = false,
 }) => {
   const theme = useTheme();
-  const isDone = task.status === "completada";
+  const isDone = task.status === "completada" || completing;
   const checklist = getChecklist(task);
   const due = getDueInfo(task);
   const priority = PRIORITY[task.priority];
@@ -617,6 +626,16 @@ export const TaskCardView = ({
         transition:
           "transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.16s ease",
         ...(open && { borderColor: alpha(projectColor, 0.35) }),
+        ...(completing && {
+          transform: "translateY(-2px)",
+          borderColor: alpha(theme.palette.success.main, isDark ? 0.75 : 0.6),
+          boxShadow: `0 0 0 1px ${alpha(theme.palette.success.main, isDark ? 0.35 : 0.22)}, 0 14px 34px ${alpha(theme.palette.success.main, isDark ? 0.22 : 0.16)}`,
+        }),
+        ...(leaving && {
+          opacity: 0,
+          transform: "scale(0.96)",
+          transition: "opacity 0.3s ease, transform 0.3s ease",
+        }),
         "&::before": {
           content: '""',
           position: "absolute",
@@ -634,18 +653,19 @@ export const TaskCardView = ({
               : "0 24px 50px rgba(15,23,42,0.2)",
           borderColor: alpha(theme.palette.primary.main, 0.45),
         }),
-        "&:hover": overlay
-          ? {}
-          : {
-              transform: "translateY(-2px)",
-              borderColor: alpha(projectColor, 0.45),
-              boxShadow: `0 14px 34px ${alpha(projectColor, isDark ? 0.18 : 0.12)}`,
-            },
+        "&:hover":
+          overlay || completing
+            ? {}
+            : {
+                transform: "translateY(-2px)",
+                borderColor: alpha(projectColor, 0.45),
+                boxShadow: `0 14px 34px ${alpha(projectColor, isDark ? 0.18 : 0.12)}`,
+              },
         "&:hover .task-menu": { opacity: 1 },
       }}
     >
       <Stack direction="row" alignItems="center" spacing={1.25}>
-        <DoneToggle done={isDone} onToggle={onToggleDone} size={ui.toggle} />
+        <DoneToggle done={isDone} celebrate={completing} onToggle={onToggleDone} size={ui.toggle} />
         <Box sx={{ position: "relative", flexShrink: 0 }}>
           <ProjectAvatar
             item={task}
@@ -839,6 +859,7 @@ const TaskCard = ({ task, ...props }) => {
   return (
     <Box
       ref={setNodeRef}
+      data-task-card={task.id}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       sx={{ position: "relative" }}
     >

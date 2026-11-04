@@ -55,6 +55,26 @@ import {
 import logoIcon from "../../assets/images/logo-icon.png";
 
 const taskRef = (id) => doc(db, "tasks", id);
+const MONTHS = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre",
+];
+const MONTH_ROWS = 4;
+const toDate = (value) => {
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  if (day) return new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]));
+  return new Date(value?.seconds ? value.seconds * 1000 : value);
+};
 
 const Home = ({ onNavigate }) => {
   const theme = useTheme();
@@ -88,7 +108,7 @@ const Home = ({ onNavigate }) => {
       .flatMap((p) =>
         (p.installments || []).map((i) => ({
           ...i,
-          date: new Date(i.date),
+          date: toDate(i.date),
           currency: p.currency || "ARS",
           projectId: p.projectId,
           projectName: p.projectName,
@@ -98,14 +118,13 @@ const Home = ({ onNavigate }) => {
       )
       .filter((i) => !Number.isNaN(i.date.getTime()))
       .sort((a, b) => b.date - a.date);
-    const collectedMonth = received
-      .filter(
-        (i) => i.date.getFullYear() === now.getFullYear() && i.date.getMonth() === now.getMonth(),
-      )
-      .reduce((acc, i) => {
-        acc[i.currency] = (acc[i.currency] || 0) + Number(i.amount || 0);
-        return acc;
-      }, {});
+    const receivedMonth = received.filter(
+      (i) => i.date.getFullYear() === now.getFullYear() && i.date.getMonth() === now.getMonth(),
+    );
+    const collectedMonth = receivedMonth.reduce((acc, i) => {
+      acc[i.currency] = (acc[i.currency] || 0) + Number(i.amount || 0);
+      return acc;
+    }, {});
 
     const toCollect = pending.reduce((acc, p) => {
       acc[p.currency] = (acc[p.currency] || 0) + p.pendingAmount;
@@ -127,7 +146,7 @@ const Home = ({ onNavigate }) => {
       dueSoon,
       pending: pending.sort((a, b) => a.progress - b.progress),
       toCollect,
-      received,
+      receivedMonth,
       collectedMonth,
       activeProjects,
       activeCount: projects.filter((project) => project.status === "activo").length,
@@ -178,6 +197,8 @@ const Home = ({ onNavigate }) => {
     );
 
   const upcoming = openTasks.slice(1, 6);
+  const monthName = MONTHS[new Date().getMonth()];
+  const extraMonth = summary.receivedMonth.length - MONTH_ROWS;
   const collectEntries = Object.entries(summary.toCollect);
 
   return (
@@ -368,7 +389,7 @@ const Home = ({ onNavigate }) => {
                 </>
               )}
 
-              {/* Cobrado este mes + últimos pagos recibidos */}
+              {/* Cobrado en el mes actual */}
               <Box
                 sx={{ mt: 1.75, pt: 1.5, borderTop: `1px solid ${theme.palette.app.borderSoft}` }}
               >
@@ -378,7 +399,9 @@ const Home = ({ onNavigate }) => {
                   justifyContent="space-between"
                   sx={{ mb: 1 }}
                 >
-                  <Typography sx={{ ...sectionTitle(theme), mb: 0 }}>Cobrado este mes</Typography>
+                  <Typography sx={{ ...sectionTitle(theme), mb: 0 }}>
+                    Cobrado en {monthName}
+                  </Typography>
                   <Stack direction="row" sx={{ gap: 1.25 }}>
                     {(Object.keys(summary.collectedMonth).length
                       ? Object.entries(summary.collectedMonth)
@@ -398,26 +421,34 @@ const Home = ({ onNavigate }) => {
                   </Stack>
                 </Stack>
 
-                {summary.received.length === 0 ? (
-                  <Typography
-                    sx={{ fontSize: "0.8rem", fontWeight: 600, color: theme.palette.app.secondary }}
-                  >
-                    Todavía no registraste pagos recibidos.
-                  </Typography>
+                {summary.receivedMonth.length === 0 ? (
+                  <EmptyRow
+                    icon={<PaymentsRoundedIcon />}
+                    text={`Todavía no registraste cobros en ${monthName}.`}
+                  />
                 ) : (
                   <Stack spacing={0.6}>
-                    <Typography
-                      sx={{
-                        fontSize: "0.72rem",
-                        fontWeight: 700,
-                        color: theme.palette.app.secondary,
-                      }}
-                    >
-                      Últimos pagos recibidos
-                    </Typography>
-                    {summary.received.slice(0, 3).map((item) => (
-                      <PaymentRow key={`${item.projectId}-${item.id}`} item={item} />
+                    {summary.receivedMonth.slice(0, MONTH_ROWS).map((item, index) => (
+                      <PaymentRow key={`${item.projectId}-${item.id || index}`} item={item} />
                     ))}
+                    {extraMonth > 0 && (
+                      <Button
+                        size="small"
+                        endIcon={<ArrowForwardRoundedIcon />}
+                        onClick={() => go("pagos")}
+                        sx={{
+                          alignSelf: "flex-end",
+                          height: 28,
+                          px: 1,
+                          borderRadius: "9px",
+                          fontSize: "0.76rem",
+                          fontWeight: 750,
+                          "& .MuiButton-endIcon": { ml: 0.4, "& svg": { fontSize: 15 } },
+                        }}
+                      >
+                        Ver {extraMonth} cobro{extraMonth === 1 ? "" : "s"} más
+                      </Button>
+                    )}
                   </Stack>
                 )}
               </Box>
@@ -818,7 +849,9 @@ function EmptyChecklist({ onAdd }) {
           <Typography sx={{ fontSize: "0.88rem", fontWeight: 800, color: theme.palette.app.text }}>
             Esta tarea no tiene checklist
           </Typography>
-          <Typography sx={{ fontSize: "0.78rem", fontWeight: 550, color: theme.palette.app.secondary }}>
+          <Typography
+            sx={{ fontSize: "0.78rem", fontWeight: 550, color: theme.palette.app.secondary }}
+          >
             Dividila en pasos chicos y seguí el avance desde acá.
           </Typography>
         </Box>
@@ -918,7 +951,12 @@ function NextUp({ task }) {
         </Typography>
         <Typography
           noWrap
-          sx={{ fontSize: "0.84rem", fontWeight: 750, color: theme.palette.app.text, lineHeight: 1.3 }}
+          sx={{
+            fontSize: "0.84rem",
+            fontWeight: 750,
+            color: theme.palette.app.text,
+            lineHeight: 1.3,
+          }}
         >
           {task.title}
         </Typography>

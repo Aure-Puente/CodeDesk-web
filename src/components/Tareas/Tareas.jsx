@@ -1,5 +1,5 @@
 //Tareas:
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   addDoc,
@@ -132,6 +132,9 @@ const readExpanded = () => {
   }
 };
 
+const COMPLETE_GLOW = 1100;
+const COMPLETE_DELAY = 1450;
+
 const Tareas = () => {
   const theme = useTheme();
   const { user } = useAuth();
@@ -164,6 +167,9 @@ const Tareas = () => {
   const [formError, setFormError] = useState("");
   const [pageError, setPageError] = useState("");
   const [toast, showToast, closeToast] = useToast();
+  const [completing, setCompleting] = useState({});
+  const completeTimers = useRef({});
+  const cardRects = useRef(null);
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -369,6 +375,95 @@ const Tareas = () => {
   const toggleDone = (task) =>
     setStatus(task, task.status === "completada" ? DEFAULT_STATUS : "completada");
 
+  useEffect(() => {
+    setCompleting((current) => {
+      const done = Object.keys(current).filter(
+        (id) => tasks.find((task) => task.id === id)?.status === "completada",
+      );
+      if (!done.length) return current;
+      const next = { ...current };
+      done.forEach((id) => delete next[id]);
+      return next;
+    });
+  }, [tasks]);
+
+  const snapshotCards = () => {
+    const rects = new Map();
+    document
+      .querySelectorAll("[data-task-card]")
+      .forEach((node) => rects.set(node.dataset.taskCard, node.getBoundingClientRect()));
+    cardRects.current = rects;
+  };
+
+  useLayoutEffect(() => {
+    const before = cardRects.current;
+    if (!before) return;
+    cardRects.current = null;
+    document.querySelectorAll("[data-task-card]").forEach((node) => {
+      const previous = before.get(node.dataset.taskCard);
+      if (!previous) return;
+      const current = node.getBoundingClientRect();
+      const dx = previous.left - current.left;
+      const dy = previous.top - current.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      node.animate(
+        [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "translate(0, 0)" }],
+        { duration: 420, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+      );
+    });
+  }, [tasks]);
+
+  const stopCompleting = (taskId) => {
+    completeTimers.current[taskId]?.forEach(clearTimeout);
+    delete completeTimers.current[taskId];
+    setCompleting(({ [taskId]: _, ...rest }) => rest);
+  };
+
+  const showCompletedToast = (task, undo) =>
+    showToast(`"${task.title || "Tarea"}" se completó.`, {
+      actionLabel: "Deshacer",
+      onAction: undo,
+      duration: 5000,
+      taskId: task.id,
+    });
+
+  const revert = (task) => updateTask(task, { status: task.status, order: task.order ?? 0 });
+
+  const completeFromCard = (task) => {
+    if (task.status === "completada") return toggleDone(task);
+    if (completeTimers.current[task.id]) {
+      stopCompleting(task.id);
+      if (toast?.taskId === task.id) closeToast();
+      return;
+    }
+
+    let committed = false;
+    setCompleting((current) => ({ ...current, [task.id]: "glow" }));
+    completeTimers.current[task.id] = [
+      setTimeout(
+        () =>
+          setCompleting((current) =>
+            current[task.id] ? { ...current, [task.id]: "leave" } : current,
+          ),
+        COMPLETE_GLOW,
+      ),
+      setTimeout(() => {
+        committed = true;
+        delete completeTimers.current[task.id];
+        snapshotCards();
+        updateTask(task, { status: "completada", order: getEdgeOrder("first") });
+      }, COMPLETE_DELAY),
+    ];
+
+    showCompletedToast(task, () => (committed ? revert(task) : stopCompleting(task.id)));
+  };
+
+  const completeFromDetail = (task) => {
+    if (task.status === "completada") return toggleDone(task);
+    toggleDone(task);
+    showCompletedToast(task, () => revert(task));
+  };
+
   const toggleChecklistItem = (task, itemId) => {
     const checklist = getChecklist(task).map((item) =>
       item.id === itemId ? { ...item, done: !item.done } : item,
@@ -515,7 +610,9 @@ const Tareas = () => {
     onOpen: () => setSelectedTaskId(task.id),
     onEdit: () => openForm(task),
     onDelete: () => setTaskToDelete(task),
-    onToggleDone: () => toggleDone(task),
+    completing: Boolean(completing[task.id]),
+    leaving: completing[task.id] === "leave",
+    onToggleDone: () => completeFromCard(task),
     onToggleChecklistItem: (itemId) => toggleChecklistItem(task, itemId),
     onAddChecklist: (text) => addChecklistItems(task, text),
     onSetPriority: (priority) => updateTask(task, { priority }),
@@ -553,7 +650,7 @@ const Tareas = () => {
               openForm(task);
             }}
             onDelete={() => setTaskToDelete(selectedTask)}
-            onToggleDone={() => toggleDone(selectedTask)}
+            onToggleDone={() => completeFromDetail(selectedTask)}
             onToggleChecklistItem={(itemId) => toggleChecklistItem(selectedTask, itemId)}
             onAddChecklist={(text) => addChecklistItems(selectedTask, text)}
           />

@@ -1,5 +1,6 @@
 // ProjectAvatar:
-import { Box, Typography } from "@mui/material";
+import { useState } from "react";
+import { Box, CircularProgress, Typography } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
 import { getProjectIconBackground, getProjectIconBorder, isDark } from "./styles";
@@ -16,6 +17,13 @@ const ProjectAvatar = ({ item, size = 52, radius, fontSize, shadow = false, fall
   const color = rawColor || theme.palette.primary.main;
   const letter = name?.charAt(0)?.toUpperCase();
   const base = typeof size === "number" ? size : size.md;
+  const [loaded, setLoaded] = useState(null);
+  const [failed, setFailed] = useState(null);
+  const showLogo = Boolean(logoUrl) && failed !== logoUrl;
+  const loading = showLogo && loaded !== logoUrl;
+  const spinner = Math.min(26, Math.max(12, Math.round(base * 0.36)));
+
+  const handleLoad = () => setLoaded(logoUrl);
 
   return (
     <Box
@@ -32,6 +40,7 @@ const ProjectAvatar = ({ item, size = 52, radius, fontSize, shadow = false, fall
         alignItems: "center",
         justifyContent: "center",
         overflow: "hidden",
+        position: "relative",
         boxShadow: shadow
           ? isDark(theme)
             ? "0 12px 24px rgba(0,0,0,0.24)"
@@ -40,13 +49,40 @@ const ProjectAvatar = ({ item, size = 52, radius, fontSize, shadow = false, fall
         ...sx,
       }}
     >
-      {logoUrl ? (
-        <Box
-          component="img"
-          src={logoUrl}
-          alt={name || "Proyecto"}
-          sx={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
+      {showLogo ? (
+        <>
+          <Box
+            component="img"
+            src={logoUrl}
+            alt={name || "Proyecto"}
+            onLoad={handleLoad}
+            onError={() => setFailed(logoUrl)}
+            ref={(node) => {
+              if (node?.complete && node.naturalWidth && loaded !== logoUrl) handleLoad();
+            }}
+            sx={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              opacity: loading ? 0 : 1,
+              transition: "opacity 0.22s ease",
+            }}
+          />
+          {loading && (
+            <Box
+              sx={{
+                position: "absolute",
+                inset: 0,
+                display: "grid",
+                placeItems: "center",
+                backgroundColor: theme.palette.app.surfaceSoft,
+                backgroundImage: `linear-gradient(${alpha(color, isDark(theme) ? 0.16 : 0.1)}, ${alpha(color, isDark(theme) ? 0.16 : 0.1)})`,
+              }}
+            >
+              <CircularProgress size={spinner} thickness={4.5} sx={{ color }} />
+            </Box>
+          )}
+        </>
       ) : letter ? (
         <Typography
           sx={{ color, fontSize: fontSize ?? base * 0.4, fontWeight: 950, lineHeight: 1 }}
