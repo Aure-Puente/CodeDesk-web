@@ -384,7 +384,17 @@ export default function Notas() {
                 onAction={resetFilters}
               />
             ) : (
-              <Box sx={{ columnCount: { xs: 1, md: 2, xl: 3 }, columnGap: { xs: 1.5, md: 1.75 } }}>
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: {
+                    xs: "1fr",
+                    md: "repeat(2, minmax(0, 1fr))",
+                    xl: "repeat(3, minmax(0, 1fr))",
+                  },
+                  gap: { xs: 1.5, md: 1.75 },
+                }}
+              >
                 {filteredNotes.map((note, index) => (
                   <NoteCard
                     key={note.id}
@@ -437,9 +447,10 @@ function NoteCard({ note, delay, onOpen, onCopy, onEdit, onDelete }) {
       sx={{
         ...getCardStyles(theme, "18px"),
         ...getSoftFadeSx(delay),
-        breakInside: "avoid",
-        mb: { xs: 1.5, md: 1.75 },
         position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
         p: { xs: 1.6, md: 1.75 },
         pt: { xs: 1.8, md: 1.95 },
         cursor: "pointer",
@@ -482,38 +493,40 @@ function NoteCard({ note, delay, onOpen, onCopy, onEdit, onDelete }) {
           fontWeight: 800,
           letterSpacing: "-0.2px",
           lineHeight: 1.3,
-          overflowWrap: "anywhere",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
         }}
       >
         {note.title || "Sin título"}
       </Typography>
 
-      {content && (
-        <Typography
-          sx={{
-            mt: 0.6,
-            color: theme.palette.app.secondary,
-            fontSize: "0.84rem",
-            lineHeight: 1.6,
-            fontWeight: 500,
-            display: "-webkit-box",
-            WebkitLineClamp: 6,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-            whiteSpace: "pre-wrap",
-            overflowWrap: "anywhere",
-          }}
-        >
-          {content}
-        </Typography>
-      )}
+      <Typography
+        sx={{
+          mt: 0.6,
+          color: theme.palette.app.secondary,
+          fontSize: "0.84rem",
+          lineHeight: 1.6,
+          fontWeight: 500,
+          height: "4.8em",
+          display: "-webkit-box",
+          WebkitLineClamp: 3,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+          whiteSpace: "pre-wrap",
+          overflowWrap: "anywhere",
+          opacity: content ? 1 : 0.65,
+        }}
+      >
+        {content || "Esta nota no tiene contenido."}
+      </Typography>
 
       <Stack
         direction="row"
         justifyContent="flex-end"
         spacing={0.5}
         className="note-actions"
-        sx={{ mt: 1.25, opacity: { xs: 1, md: 0.7 }, transition: "opacity 0.18s ease" }}
+        sx={{ mt: "auto", pt: 1.25, opacity: { xs: 1, md: 0.7 }, transition: "opacity 0.18s ease" }}
       >
         <IconAction title="Copiar" size={30} color={theme.palette.app.secondary} onClick={onCopy}>
           <ContentCopyRoundedIcon sx={{ fontSize: 15 }} />
