@@ -19,6 +19,7 @@ import { alpha, useTheme } from "@mui/material/styles";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import AssignmentRoundedIcon from "@mui/icons-material/AssignmentRounded";
 import CheckRoundedIcon from "@mui/icons-material/CheckRounded";
 import ChecklistRoundedIcon from "@mui/icons-material/ChecklistRounded";
 import DeleteRoundedIcon from "@mui/icons-material/DeleteRounded";
@@ -544,6 +545,7 @@ export const TaskCardView = ({
   overlay = false,
   expanded = false,
   large = false,
+  compact = false,
   dragProps,
   onToggleExpand,
   onOpen,
@@ -567,8 +569,35 @@ export const TaskCardView = ({
   const open = expanded && !overlay;
   const hasMeta = showStatus || priority || due;
   const ui = large
-    ? { pad: 1.6, padLeft: 1.9, avatar: 30, project: "0.82rem", title: "1.02rem", toggle: 23, indent: 4, body: "0.86rem" }
-    : { pad: 1.2, padLeft: 1.5, avatar: 24, project: "0.75rem", title: "0.9rem", toggle: 20, indent: 3.5, body: "0.8rem" };
+    ? {
+        pad: 1.6,
+        padLeft: 1.9,
+        avatar: 52,
+        project: "0.8rem",
+        title: "1.02rem",
+        toggle: 20,
+        body: "0.86rem",
+      }
+    : compact
+      ? {
+          pad: 1.1,
+          padLeft: 1.4,
+          avatar: 34,
+          project: "0.72rem",
+          title: "0.88rem",
+          toggle: 16,
+          body: "0.8rem",
+        }
+      : {
+          pad: 1.2,
+          padLeft: 1.5,
+          avatar: 44,
+          project: "0.74rem",
+          title: "0.92rem",
+          toggle: 18,
+          body: "0.8rem",
+        };
+  const indent = `${compact ? ui.toggle + 10 : ui.toggle + ui.avatar + 20}px`;
 
   return (
     <Card
@@ -615,83 +644,90 @@ export const TaskCardView = ({
         "&:hover .task-menu": { opacity: 1 },
       }}
     >
-      {/* Proyecto + indicadores + menú */}
-      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75, minHeight: 26 }}>
-        {task.projectId ? (
+      <Stack direction="row" alignItems="center" spacing={1.25}>
+        <DoneToggle done={isDone} onToggle={onToggleDone} size={ui.toggle} />
+        <Box sx={{ position: "relative", flexShrink: 0 }}>
           <ProjectAvatar
             item={task}
             size={ui.avatar}
-            fontSize={ui.avatar / 2}
-            radius={`${Math.round(ui.avatar * 0.3)}px`}
-            sx={{ border: "none", boxShadow: `0 4px 12px ${alpha(projectColor, 0.22)}` }}
-          />
-        ) : null}
-        <Typography
-          noWrap
-          sx={{
-            flex: 1,
-            minWidth: 0,
-            fontSize: ui.project,
-            fontWeight: 700,
-            color: theme.palette.app.secondary,
-          }}
-        >
-          {task.projectName || "Personal"}
-        </Typography>
-        {!open && <CompactIndicators task={task} checklist={checklist} isDone={isDone} />}
-        <Box
-          className="task-menu"
-          sx={{ opacity: { xs: 1, md: overlay ? 1 : 0.55 }, transition: "opacity 0.16s ease" }}
-        >
-          <TaskMenu
-            task={task}
-            onEdit={onEdit}
-            onOpen={onOpen}
-            onDelete={onDelete}
-            onSetPriority={onSetPriority}
-            onSetStatus={onSetStatus}
-            onMoveTop={onMoveTop}
+            fallback={
+              <AssignmentRoundedIcon
+                sx={{ color: theme.palette.app.secondary, fontSize: ui.avatar * 0.48 }}
+              />
+            }
+            sx={
+              task.projectId
+                ? { boxShadow: `0 6px 16px ${alpha(projectColor, isDark ? 0.18 : 0.14)}` }
+                : { bgcolor: getSoftBackground(theme), borderColor: theme.palette.app.borderSoft }
+            }
           />
         </Box>
-      </Stack>
-
-      {/* Check + título + flecha */}
-      <Stack direction="row" alignItems="flex-start" spacing={1}>
-        <DoneToggle done={isDone} onToggle={onToggleDone} size={ui.toggle} />
-        <Typography
-          sx={{
-            flex: 1,
-            minWidth: 0,
-            color: isDone ? theme.palette.app.secondary : theme.palette.app.text,
-            fontSize: ui.title,
-            fontWeight: 750,
-            lineHeight: 1.35,
-            textDecoration: isDone ? "line-through" : "none",
-            ...(open
-              ? { overflowWrap: "anywhere" }
-              : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }),
-          }}
-        >
-          {task.title || "Tarea sin título"}
-        </Typography>
-        {onToggleExpand && (
-          <ExpandMoreRoundedIcon
-            aria-hidden
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography
             sx={{
-              flexShrink: 0,
-              mt: "1px",
-              fontSize: 20,
-              color: theme.palette.app.secondary,
-              transform: open ? "rotate(180deg)" : "none",
-              transition: "transform 0.2s ease",
+              color: isDone ? theme.palette.app.secondary : theme.palette.app.text,
+              fontSize: ui.title,
+              fontWeight: 800,
+              lineHeight: 1.3,
+              letterSpacing: "-0.2px",
+              textDecoration: isDone ? "line-through" : "none",
+              ...(open
+                ? { overflowWrap: "anywhere" }
+                : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }),
             }}
-          />
-        )}
+          >
+            {task.title || "Tarea sin título"}
+          </Typography>
+          <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mt: 0.3, minWidth: 0 }}>
+            <Typography
+              noWrap
+              sx={{
+                minWidth: 0,
+                fontSize: ui.project,
+                fontWeight: 700,
+                color: theme.palette.app.secondary,
+              }}
+            >
+              {task.projectName || "Tarea personal"}
+            </Typography>
+            {!open && <CompactIndicators task={task} checklist={checklist} isDone={isDone} />}
+          </Stack>
+        </Box>
+        <Stack
+          alignItems="center"
+          sx={{ flexShrink: 0, alignSelf: "stretch", justifyContent: "space-between" }}
+        >
+          <Box
+            className="task-menu"
+            sx={{ opacity: { xs: 1, md: overlay ? 1 : 0.55 }, transition: "opacity 0.16s ease" }}
+          >
+            <TaskMenu
+              task={task}
+              onEdit={onEdit}
+              onOpen={onOpen}
+              onDelete={onDelete}
+              onSetPriority={onSetPriority}
+              onSetStatus={onSetStatus}
+              onMoveTop={onMoveTop}
+            />
+          </Box>
+          {onToggleExpand && (
+            <ExpandMoreRoundedIcon
+              aria-hidden
+              sx={{
+                fontSize: 20,
+                color: theme.palette.app.secondary,
+                transform: open ? "rotate(180deg)" : "none",
+                transition: "transform 0.2s ease",
+              }}
+            />
+          )}
+        </Stack>
       </Stack>
 
       {/* Detalle desplegable */}
       <Collapse in={open} timeout={200} unmountOnExit>
-        <Box sx={{ pl: ui.indent, pt: 0.75 }}>
+        <Box sx={{ pl: indent, pt: 1 }}>
           {task.description && (
             <Typography
               sx={{
@@ -716,7 +752,11 @@ export const TaskCardView = ({
               <Box sx={{ pl: 0.9, pr: 0.25, mb: 0.4 }}>
                 <ChecklistProgress checklist={checklist} />
               </Box>
-              <ChecklistItems checklist={checklist} onToggle={onToggleChecklistItem} dense={!large} />
+              <ChecklistItems
+                checklist={checklist}
+                onToggle={onToggleChecklistItem}
+                dense={!large}
+              />
             </Box>
           )}
 
@@ -727,11 +767,7 @@ export const TaskCardView = ({
           )}
 
           {(hasMeta || onOpen) && (
-            <Stack
-              direction="row"
-              alignItems="center"
-              sx={{ mt: 1, flexWrap: "wrap", gap: 0.6 }}
-            >
+            <Stack direction="row" alignItems="center" sx={{ mt: 1, flexWrap: "wrap", gap: 0.6 }}>
               {showStatus && (
                 <MetaPill
                   icon={getStatusIcon(task.status)}

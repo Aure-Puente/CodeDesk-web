@@ -122,8 +122,7 @@ const readStorage = (key, fallback) => {
 const writeStorage = (key, value) => {
   try {
     localStorage.setItem(key, value);
-  } catch {
-  }
+  } catch {}
 };
 const readExpanded = () => {
   try {
@@ -228,9 +227,10 @@ const Tareas = () => {
   );
 
   const boardColumns = boardFilter === "activas" ? ACTIVE_COLUMNS : BOARD_COLUMNS;
-  const shownTasks = view === "board"
-    ? visibleTasks.filter((task) => boardColumns.includes(task.status))
-    : listTasks;
+  const shownTasks =
+    view === "board"
+      ? visibleTasks.filter((task) => boardColumns.includes(task.status))
+      : listTasks;
   const allExpanded = shownTasks.length > 0 && shownTasks.every((task) => expanded.has(task.id));
   const toggleAll = () =>
     setExpanded((current) => {
@@ -735,6 +735,7 @@ const Tareas = () => {
                               key={task.id}
                               task={task}
                               large={boardColumns.length <= 2}
+                              compact={boardColumns.length > 2}
                               {...cardHandlers(task)}
                             />
                           ))}
@@ -747,7 +748,12 @@ const Tareas = () => {
                 {createPortal(
                   <DragOverlay dropAnimation={{ duration: 180 }}>
                     {activeTask ? (
-                      <TaskCardView task={activeTask} large={boardColumns.length <= 2} overlay />
+                      <TaskCardView
+                        task={activeTask}
+                        large={boardColumns.length <= 2}
+                        compact={boardColumns.length > 2}
+                        overlay
+                      />
                     ) : null}
                   </DragOverlay>,
                   document.body,
@@ -794,7 +800,7 @@ const Tareas = () => {
                               }}
                             >
                               {group.map((task) => (
-                                <TaskCard key={task.id} task={task} {...cardHandlers(task)} />
+                                <TaskCard key={task.id} task={task} large {...cardHandlers(task)} />
                               ))}
                             </Box>
                           </SortableContext>
@@ -1074,7 +1080,6 @@ function BoardColumn({ status, count, onQuickAdd, footer, children }) {
           overflowY: { md: "auto" },
           mx: -0.5,
           px: 0.5,
-          //Lugar para que el brillo del hover no se corte arriba:
           mt: -0.75,
           pt: 0.75,
           pb: 0.25,
