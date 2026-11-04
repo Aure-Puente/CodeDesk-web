@@ -2,7 +2,8 @@
 
 Panel personal para organizar proyectos, tareas, pagos, notas, enlaces, credenciales y accesos a Firebase.
 
-**Stack:** React 19 · Vite 8 · MUI 9 · MUI X (Charts y Date Pickers) · Firebase (Auth, Firestore, Storage) · dnd-kit · dayjs · react-colorful
+**Stack:** React 19 · Vite 8 · MUI 9 · MUI X (Charts y Date Pickers) · Firebase (Auth, Firestore, Storage) · dnd-kit · dayjs · react-colorful ·
+@noble/ciphers y @noble/hashes (cifrado de credenciales)
 
 ## Scripts
 
@@ -34,6 +35,7 @@ src/
 └── shared/                 Código reutilizado por todas las secciones
     ├── hooks/useUserCollection.js   Suscripción en tiempo real a una colección del usuario
     ├── utils/index.js               URLs, montos, fechas, pagos, portapapeles, campos de proyecto
+    ├── utils/vault.js               Bóveda de credenciales: contraseña maestra, recuperación y cifrado
     └── ui/                          Componentes y estilos comunes
         ├── styles.js                Animaciones, tarjetas, colores suaves, props de menús
         ├── Stack.jsx                Stack compatible con MUI 9 (alignItems/justifyContent/flexWrap)
@@ -90,10 +92,28 @@ Cobros con pagos parciales, saldos separados en pesos y dólares y fecha con dat
 
 Gráficos con MUI X Charts (barras, dona y medidores) sobre tareas, proyectos y cobros.
 
-### Notas, Enlaces, Base de datos y Credenciales
+### Notas, Enlaces y Base de datos
 
-Tarjetas compactas con búsqueda y filtro por proyecto. Credenciales permite mostrar/copiar datos sin
-dejarlos visibles.
+Tarjetas compactas con búsqueda y filtro por proyecto.
+
+### Credenciales
+
+Accesos de producción y local por proyecto, **cifrados de punta a punta** con una contraseña maestra.
+Los datos se cifran en el navegador antes de guardarse: a Firestore solo llega texto ilegible.
+
+- **Contraseña maestra:** se crea una sola vez (mínimo 10 caracteres, con medidor de seguridad) y no se
+  guarda en ningún lado. Al crearla se muestra una **clave de recuperación** (`XXXXX-XXXXX-XXXXX-XXXXX`)
+  que hay que anotar fuera de CodeDesk; es la única forma de volver a entrar si se olvida la contraseña.
+- **Cómo funciona:** una llave aleatoria (AES-256-GCM) cifra todas las credenciales. Esa llave se guarda
+  en `users/{uid}.vault` envuelta dos veces: con la contraseña maestra y con la clave de recuperación,
+  ambas derivadas con scrypt. Una contraseña incorrecta se detecta porque el descifrado falla.
+- **Qué se guarda en claro:** solo el proyecto y si hay datos de producción/local (`hasProduction`,
+  `hasLocal`) para mostrar las tarjetas bloqueadas. URL, usuario, contraseña y notas van dentro de `secret`.
+- **Bloqueo:** se bloquea a los 5 minutos sin actividad o al salir de la sección. Las contraseñas
+  copiadas se borran del portapapeles a los 30 segundos.
+- **Compatible con la app mobile:** misma bóveda y misma contraseña maestra en web y celular.
+- Si se pierden la contraseña maestra y la clave de recuperación, **las credenciales no se pueden
+  recuperar** (ni desde Firebase).
 
 ## Firestore
 
@@ -105,3 +125,10 @@ con el nombre del proyecto.
 Las reglas de seguridad solo permiten a cada usuario leer y escribir sus propios documentos (`userId`
 igual a su `uid`, también al actualizar). En Storage, cada usuario accede solo a su carpeta y las imágenes
 tienen un máximo de 5 MB.
+
+Reglas extra para la bóveda:
+
+- `credentials`: se rechaza cualquier documento sin `secret` cifrado o con `production`, `local` o
+  `notes` en texto plano.
+- `users`: no se puede borrar el documento ni reemplazar la bóveda por otra (cambiar la contraseña
+  maestra con la clave de recuperación sí está permitido).

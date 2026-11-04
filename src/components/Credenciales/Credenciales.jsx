@@ -1,13 +1,26 @@
 //Credenciales:
-import { useMemo, useState } from "react";
-import { addDoc, collection, deleteDoc, doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  deleteField,
+  doc,
+  onSnapshot,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+} from "firebase/firestore";
 import {
   Alert,
   Box,
   Button,
   Card,
+  Checkbox,
+  FormControlLabel,
   IconButton,
   InputAdornment,
+  LinearProgress,
   TextField,
   Tooltip,
   Typography,
@@ -21,9 +34,13 @@ import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
 import DeleteRoundedIcon from "@mui/icons-material/DeleteRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
+import GppGoodRoundedIcon from "@mui/icons-material/GppGoodRounded";
 import KeyRoundedIcon from "@mui/icons-material/KeyRounded";
 import LaptopRoundedIcon from "@mui/icons-material/LaptopRounded";
 import LinkRoundedIcon from "@mui/icons-material/LinkRounded";
+import LockOpenRoundedIcon from "@mui/icons-material/LockOpenRounded";
+import LockResetRoundedIcon from "@mui/icons-material/LockResetRounded";
+import LockRoundedIcon from "@mui/icons-material/LockRounded";
 import NoteAltRoundedIcon from "@mui/icons-material/NoteAltRounded";
 import OpenInNewRoundedIcon from "@mui/icons-material/OpenInNewRounded";
 import PasswordRoundedIcon from "@mui/icons-material/PasswordRounded";
@@ -35,6 +52,15 @@ import { db } from "../../firebase/firebase";
 import { useAuth } from "../../context/AuthContext";
 import useUserCollection, { byCreatedDesc, byName } from "../../shared/hooks/useUserCollection";
 import { copyToClipboard, getShortUrl, normalizeUrl, projectFields } from "../../shared/utils";
+import {
+  VAULT_VERSION,
+  createVault,
+  decryptJson,
+  encryptJson,
+  getPasswordStrength,
+  recoverVault,
+  unlockVault,
+} from "../../shared/utils/vault";
 import {
   AppDialog,
   DeleteDialog,
@@ -72,9 +98,30 @@ const EMPTY_FORM = {
   notes: "",
 };
 
+const LOCK_AFTER = 5 * 60 * 1000;
+const CLEAR_CLIPBOARD_AFTER = 30 * 1000;
+const MIN_MASTER_LENGTH = 10;
+const STRENGTH = [
+  { label: "Muy débil", color: "error" },
+  { label: "Débil", color: "error" },
+  { label: "Aceptable", color: "warning" },
+  { label: "Buena", color: "info" },
+  { label: "Fuerte", color: "success" },
+];
+
 const hasProductionData = (c) =>
+  c?.hasProduction ??
   Boolean(c?.production?.email || c?.production?.password || c?.production?.url);
-const hasLocalData = (c) => Boolean(c?.local?.email || c?.local?.password);
+const hasLocalData = (c) => c?.hasLocal ?? Boolean(c?.local?.email || c?.local?.password);
+
+const validateMaster = (password, confirm) => {
+  if (password.length < MIN_MASTER_LENGTH)
+    return `La contraseña maestra necesita al menos ${MIN_MASTER_LENGTH} caracteres.`;
+  if (getPasswordStrength(password) < 2)
+    return "Usá una contraseña más fuerte: mezclá letras, números y símbolos.";
+  if (password !== confirm) return "Las contraseñas no coinciden.";
+  return "";
+};
 
 const formatShortDate = (ts) => {
   const date = ts?.toDate?.() ?? (ts?.seconds ? new Date(ts.seconds * 1000) : null);
@@ -113,6 +160,73 @@ export default function Credenciales() {
   const [pageError, setPageError] = useState("");
   const [toast, showToast, closeToast] = useToast();
 
+  const [vault, setVault] = useState(undefined);
+  const [dataKey, setDataKey] = useState(null);
+  const [vaultDialog, setVaultDialog] = useState(null);
+  const [pending, setPending] = useState(null);
+  const [newVault, setNewVault] = useState(null);
+  const clipboardTimer = useRef(null);
+
+  useEffect(() => {
+    if (!user?.uid) return undefined;
+    return onSnapshot(
+      doc(db, "users", user.uid),
+      (snapshot) => setVault(snapshot.data()?.vault || null),
+      (error) => {
+        console.error(error);
+        setVault(null);
+        setPageError("No se pudo cargar la configuración de seguridad.");
+      },
+    );
+  }, [user?.uid]);
+
+  const lock = useCallback(() => {
+    setDataKey(null);
+    setSelected(null);
+    setFormOpen(false);
+    setEditing(null);
+    setForm(EMPTY_FORM);
+  }, []);
+
+  useEffect(() => {
+    if (!dataKey) return undefined;
+    let timer;
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(lock, LOCK_AFTER);
+    };
+    const events = ["pointerdown", "keydown", "scroll", "mousemove"];
+    events.forEach((name) => window.addEventListener(name, reset, { passive: true }));
+    reset();
+    return () => {
+      clearTimeout(timer);
+      events.forEach((name) => window.removeEventListener(name, reset));
+    };
+  }, [dataKey, lock]);
+
+  useEffect(() => () => clearTimeout(clipboardTimer.current), []);
+
+  const items = useMemo(
+    () =>
+      credentials.map((c) => {
+        if (!c.secret) return { ...c, locked: false };
+        if (!dataKey) return { ...c, locked: true };
+        try {
+          return { ...c, ...decryptJson(dataKey, c.secret), locked: false };
+        } catch (error) {
+          console.error(error);
+          return { ...c, locked: true, broken: true };
+        }
+      }),
+    [credentials, dataKey],
+  );
+
+  const requireUnlock = (action) => {
+    if (dataKey) return action.run?.();
+    setPending(action);
+    setVaultDialog(vault ? "unlock" : "setup");
+  };
+
   const env = {
     production: {
       label: "Producción",
@@ -125,11 +239,11 @@ export default function Credenciales() {
   const query = search.trim().toLowerCase();
   const filtered = useMemo(
     () =>
-      credentials.filter(
+      items.filter(
         (c) =>
           (filterProject === "todos" || c.projectId === filterProject) && matchesSearch(c, query),
       ),
-    [credentials, filterProject, query],
+    [items, filterProject, query],
   );
   const hasFilters = filterProject !== "todos" || Boolean(query);
   const resetFilters = () => {
@@ -168,22 +282,73 @@ export default function Credenciales() {
     setFormOpen(true);
   };
 
+  useEffect(() => {
+    if (!dataKey || !pending) return;
+    const action = pending;
+    setPending(null);
+    if (action.type === "new") return openForm();
+    const item = items.find((c) => c.id === action.id);
+    if (!item || item.locked) return;
+    if (action.type === "open") setSelected(item);
+    else openForm(item);
+  }, [dataKey, pending, items]);
+
   const copyValue = async (value, label) => {
     if (!value)
       return showToast(`No hay ${label.toLowerCase()} para copiar.`, { severity: "warning" });
     const copied = await copyToClipboard(value);
-    showToast(copied ? `${label} copiado al portapapeles.` : "No se pudo copiar el dato.", {
-      severity: copied ? "success" : "error",
-    });
+    clearTimeout(clipboardTimer.current);
+    if (copied && label === "Contraseña") {
+      clipboardTimer.current = setTimeout(() => copyToClipboard(""), CLEAR_CLIPBOARD_AFTER);
+    }
+    showToast(
+      copied
+        ? label === "Contraseña"
+          ? "Contraseña copiada. Se borra del portapapeles en 30 segundos."
+          : `${label} copiado al portapapeles.`
+        : "No se pudo copiar el dato.",
+      { severity: copied ? "success" : "error" },
+    );
+  };
+
+  const handleCreateVault = async (password) => {
+    const created = await createVault(password);
+    await setDoc(doc(db, "users", user.uid), { vault: created.vault }, { merge: true });
+    setNewVault(created);
+    setVaultDialog("recovery");
+  };
+
+  const handleUnlock = async (password) => {
+    setDataKey(await unlockVault(vault, password));
+    setVaultDialog(null);
+  };
+
+  const handleRecover = async (code, password) => {
+    const recovered = await recoverVault(vault, code, password);
+    await setDoc(doc(db, "users", user.uid), { vault: recovered.vault }, { merge: true });
+    setDataKey(recovered.dataKey);
+    setVaultDialog(null);
+    showToast("Listo, tu nueva contraseña maestra ya está activa.");
+  };
+
+  const finishSetup = () => {
+    setDataKey(newVault.dataKey);
+    setNewVault(null);
+    setVaultDialog(null);
+    showToast("Bóveda creada. Tus credenciales se guardan cifradas.");
+  };
+
+  const closeVaultDialog = () => {
+    setVaultDialog(null);
+    setPending(null);
   };
 
   const handleSave = async (event) => {
     event?.preventDefault();
     if (!form.projectId) return setFormError("Seleccioná un proyecto.");
+    if (!dataKey) return setFormError("La bóveda se bloqueó. Desbloqueala para guardar.");
 
-    const payload = {
-      userId: user.uid,
-      ...projectFields(projects.find((project) => project.id === form.projectId)),
+    const secret = {
       production: {
         email: form.prodEmail.trim(),
         password: form.prodPassword.trim(),
@@ -191,13 +356,27 @@ export default function Credenciales() {
       },
       local: { email: form.localEmail.trim(), password: form.localPassword.trim() },
       notes: form.notes.trim(),
+    };
+    const payload = {
+      userId: user.uid,
+      ...projectFields(projects.find((project) => project.id === form.projectId)),
+      v: VAULT_VERSION,
+      secret: encryptJson(dataKey, secret),
+      hasProduction: hasProductionData(secret),
+      hasLocal: hasLocalData(secret),
       updatedAt: serverTimestamp(),
     };
 
     try {
       setSaving(true);
       setFormError("");
-      if (editing) await updateDoc(doc(db, "credentials", editing.id), payload);
+      if (editing)
+        await updateDoc(doc(db, "credentials", editing.id), {
+          ...payload,
+          production: deleteField(),
+          local: deleteField(),
+          notes: deleteField(),
+        });
       else
         await addDoc(collection(db, "credentials"), { ...payload, createdAt: serverTimestamp() });
       setFormOpen(false);
@@ -221,9 +400,11 @@ export default function Credenciales() {
     }
   };
 
+  const locked = Boolean(vault) && !dataKey;
+
   return (
     <PageShell
-      loading={loading}
+      loading={loading || vault === undefined}
       after={
         <>
           <FormDialog
@@ -341,6 +522,32 @@ export default function Credenciales() {
             onConfirm={confirmDelete}
           />
 
+          <MasterSetupDialog
+            open={vaultDialog === "setup"}
+            onClose={closeVaultDialog}
+            onSubmit={handleCreateVault}
+          />
+
+          <RecoveryCodeDialog
+            open={vaultDialog === "recovery"}
+            code={newVault?.recoveryCode}
+            onCopy={(value) => copyValue(value, "Clave de recuperación")}
+            onDone={finishSetup}
+          />
+
+          <UnlockDialog
+            open={vaultDialog === "unlock"}
+            onClose={closeVaultDialog}
+            onSubmit={handleUnlock}
+            onForgot={() => setVaultDialog("recover")}
+          />
+
+          <RecoverDialog
+            open={vaultDialog === "recover"}
+            onClose={closeVaultDialog}
+            onSubmit={handleRecover}
+          />
+
           <Toast toast={toast} onClose={closeToast} />
         </>
       }
@@ -351,7 +558,17 @@ export default function Credenciales() {
           title="Credenciales"
           description="Accesos por proyecto para producción y local, listos para copiar."
           actionLabel="Nueva credencial"
-          onAction={() => openForm()}
+          onAction={() => requireUnlock({ type: "new", run: () => openForm() })}
+        />
+      </Section>
+
+      <Section delay={40}>
+        <VaultBar
+          vault={vault}
+          locked={locked}
+          onSetup={() => setVaultDialog("setup")}
+          onUnlock={() => setVaultDialog("unlock")}
+          onLock={lock}
         />
       </Section>
 
@@ -393,7 +610,7 @@ export default function Credenciales() {
             <SearchField
               value={search}
               onChange={setSearch}
-              placeholder="Buscar proyecto, email o URL..."
+              placeholder={locked ? "Buscar proyecto..." : "Buscar proyecto, email o URL..."}
               width={280}
             />
             <FilterSelect
@@ -415,7 +632,7 @@ export default function Credenciales() {
             title="Todavía no guardaste credenciales"
             text="Cargá los accesos de cada proyecto (producción y local) y copialos con un clic cuando los necesites."
             actionLabel="Nueva credencial"
-            onAction={() => openForm()}
+            onAction={() => requireUnlock({ type: "new", run: () => openForm() })}
           />
         ) : filtered.length === 0 ? (
           <EmptyState
@@ -440,7 +657,11 @@ export default function Credenciales() {
                 credential={credential}
                 env={env}
                 delay={index * 45}
-                onOpen={() => setSelected(credential)}
+                onOpen={() =>
+                  credential.locked
+                    ? requireUnlock({ type: "open", id: credential.id })
+                    : setSelected(credential)
+                }
                 onCopy={copyValue}
               />
             ))}
@@ -605,10 +826,14 @@ function CredentialCard({ credential, env, delay, onOpen, onCopy }) {
             {updated ? `Actualizado ${updated}` : "Accesos guardados"}
           </Typography>
         </Box>
-        <ArrowForwardRoundedIcon
-          className="card-arrow"
-          sx={{ fontSize: 19, color: theme.palette.app.secondary, transition: "all 0.18s ease" }}
-        />
+        {credential.locked ? (
+          <LockRoundedIcon sx={{ fontSize: 18, color: theme.palette.app.secondary }} />
+        ) : (
+          <ArrowForwardRoundedIcon
+            className="card-arrow"
+            sx={{ fontSize: 19, color: theme.palette.app.secondary, transition: "all 0.18s ease" }}
+          />
+        )}
       </Stack>
 
       <Stack spacing={0.75} sx={{ mt: 1.5 }}>
@@ -617,6 +842,7 @@ function CredentialCard({ credential, env, delay, onOpen, onCopy }) {
           data={credential.production}
           value={credential.production?.email || getShortUrl(credential.production?.url)}
           hasData={hasProductionData(credential)}
+          locked={credential.locked}
           onCopy={onCopy}
         />
         <EnvLine
@@ -624,6 +850,7 @@ function CredentialCard({ credential, env, delay, onOpen, onCopy }) {
           data={credential.local}
           value={credential.local?.email}
           hasData={hasLocalData(credential)}
+          locked={credential.locked}
           onCopy={onCopy}
         />
       </Stack>
@@ -631,7 +858,7 @@ function CredentialCard({ credential, env, delay, onOpen, onCopy }) {
   );
 }
 
-function EnvLine({ label, icon, color, data, value, hasData, onCopy }) {
+function EnvLine({ label, icon, color, data, value, hasData, locked, onCopy }) {
   const theme = useTheme();
 
   return (
@@ -672,10 +899,14 @@ function EnvLine({ label, icon, color, data, value, hasData, onCopy }) {
             fontWeight: 650,
           }}
         >
-          {hasData ? value || "Sin usuario" : "Sin datos cargados"}
+          {!hasData
+            ? "Sin datos cargados"
+            : locked
+              ? "•••••••• · bloqueado"
+              : value || "Sin usuario"}
         </Typography>
       </Box>
-      {hasData && (
+      {hasData && !locked && (
         <Stack direction="row" spacing={0.5}>
           <IconAction
             title="Copiar usuario"
@@ -909,5 +1140,411 @@ function CopyRow({ label, value, isPassword = false, onCopy }) {
         )}
       </Stack>
     </Box>
+  );
+}
+
+function VaultBar({ vault, locked, onSetup, onUnlock, onLock }) {
+  const theme = useTheme();
+  const state = !vault
+    ? {
+        icon: <ShieldRoundedIcon />,
+        color: theme.palette.primary.main,
+        title: "Protegé tus credenciales",
+        text: "Creá una contraseña maestra: tus accesos se cifran en tu dispositivo antes de guardarse.",
+        action: (
+          <Button
+            variant="contained"
+            startIcon={<GppGoodRoundedIcon />}
+            onClick={onSetup}
+            sx={{ minHeight: 40, px: 2, borderRadius: "12px", fontWeight: 800, boxShadow: "none" }}
+          >
+            Crear contraseña maestra
+          </Button>
+        ),
+      }
+    : locked
+      ? {
+          icon: <LockRoundedIcon />,
+          color: theme.palette.warning.main,
+          title: "Credenciales bloqueadas",
+          text: "Ingresá tu contraseña maestra para ver, copiar y editar los accesos.",
+          action: (
+            <Button
+              variant="contained"
+              startIcon={<LockOpenRoundedIcon />}
+              onClick={onUnlock}
+              sx={{
+                minHeight: 40,
+                px: 2,
+                borderRadius: "12px",
+                fontWeight: 800,
+                boxShadow: "none",
+              }}
+            >
+              Desbloquear
+            </Button>
+          ),
+        }
+      : {
+          icon: <LockOpenRoundedIcon />,
+          color: theme.palette.success.main,
+          title: "Credenciales desbloqueadas",
+          text: "Se bloquean solas tras 5 minutos sin uso o al salir de esta sección.",
+          action: (
+            <Button
+              startIcon={<LockRoundedIcon />}
+              onClick={onLock}
+              sx={{
+                minHeight: 40,
+                px: 1.8,
+                borderRadius: "12px",
+                fontWeight: 750,
+                border: `1px solid ${theme.palette.app.borderSoft}`,
+                color: theme.palette.app.text,
+              }}
+            >
+              Bloquear
+            </Button>
+          ),
+        };
+
+  return (
+    <Card
+      elevation={0}
+      sx={{
+        ...getCardStyles(theme, "18px"),
+        p: { xs: 1.6, md: 1.75 },
+        display: "flex",
+        flexDirection: { xs: "column", sm: "row" },
+        alignItems: { xs: "stretch", sm: "center" },
+        gap: 1.5,
+        borderColor: alpha(state.color, 0.3),
+      }}
+    >
+      <Stack direction="row" alignItems="center" spacing={1.4} sx={{ flex: 1, minWidth: 0 }}>
+        <TintIcon color={state.color} size={40}>
+          {state.icon}
+        </TintIcon>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ color: theme.palette.app.text, fontSize: "0.95rem", fontWeight: 800 }}>
+            {state.title}
+          </Typography>
+          <Typography
+            sx={{ color: theme.palette.app.secondary, fontSize: "0.8rem", fontWeight: 600 }}
+          >
+            {state.text}
+          </Typography>
+        </Box>
+      </Stack>
+      {state.action}
+    </Card>
+  );
+}
+
+function StrengthMeter({ password }) {
+  const theme = useTheme();
+  if (!password) return null;
+  const score = getPasswordStrength(password);
+  const level = STRENGTH[score];
+
+  return (
+    <Box>
+      <LinearProgress
+        variant="determinate"
+        value={(score / 4) * 100}
+        color={level.color}
+        sx={{ height: 6, borderRadius: 999, bgcolor: theme.palette.app.borderSoft }}
+      />
+      <Typography
+        sx={{
+          mt: 0.6,
+          fontSize: "0.74rem",
+          fontWeight: 700,
+          color: theme.palette[level.color].main,
+        }}
+      >
+        Seguridad: {level.label}
+      </Typography>
+    </Box>
+  );
+}
+
+function useVaultForm(open) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setBusy(false);
+      setError("");
+    }
+  }, [open]);
+
+  const run = async (action, failMessage) => {
+    try {
+      setBusy(true);
+      setError("");
+      await action();
+    } catch (failure) {
+      console.error(failure);
+      setError(failMessage);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return { busy, error, setError, run };
+}
+
+function MasterSetupDialog({ open, onClose, onSubmit }) {
+  const theme = useTheme();
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const { busy, error, setError, run } = useVaultForm(open);
+
+  useEffect(() => {
+    if (open) {
+      setPassword("");
+      setConfirm("");
+    }
+  }, [open]);
+
+  const submit = (event) => {
+    event?.preventDefault();
+    const problem = validateMaster(password, confirm);
+    if (problem) return setError(problem);
+    run(() => onSubmit(password), "No se pudo crear la bóveda. Intentá de nuevo.");
+  };
+
+  return (
+    <FormDialog
+      open={open}
+      onClose={() => !busy && onClose()}
+      onSubmit={submit}
+      saving={busy}
+      error={error}
+      icon={<GppGoodRoundedIcon />}
+      title="Crear contraseña maestra"
+      subtitle="Cifra tus credenciales antes de guardarlas."
+      submitIcon={<LockRoundedIcon />}
+      submitLabel="Crear y proteger"
+    >
+      <Alert severity="info" sx={{ borderRadius: "14px", fontWeight: 600 }}>
+        No se guarda en ningún lado, ni siquiera en tu cuenta. Si la olvidás, solo vas a poder
+        recuperar el acceso con la clave de recuperación que te mostramos a continuación.
+      </Alert>
+      <IconField
+        label="Contraseña maestra"
+        password
+        autoFocus
+        autoComplete="new-password"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+        disabled={busy}
+      />
+      <StrengthMeter password={password} />
+      <IconField
+        label="Repetir contraseña maestra"
+        password
+        autoComplete="new-password"
+        value={confirm}
+        onChange={(event) => setConfirm(event.target.value)}
+        disabled={busy}
+      />
+      <Typography sx={{ color: theme.palette.app.secondary, fontSize: "0.76rem", fontWeight: 600 }}>
+        Mínimo {MIN_MASTER_LENGTH} caracteres. Una frase larga es más segura y fácil de recordar.
+      </Typography>
+    </FormDialog>
+  );
+}
+
+function RecoveryCodeDialog({ open, code, onCopy, onDone }) {
+  const theme = useTheme();
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (open) setSaved(false);
+  }, [open]);
+
+  return (
+    <AppDialog
+      open={open}
+      locked
+      onClose={() => {}}
+      icon={<LockResetRoundedIcon />}
+      iconColor={theme.palette.warning.main}
+      title="Tu clave de recuperación"
+      subtitle="Es la única forma de recuperar el acceso si olvidás la contraseña maestra."
+      actions={
+        <Button
+          variant="contained"
+          disabled={!saved}
+          onClick={onDone}
+          sx={{ minHeight: 40, px: 2.2, borderRadius: "12px", fontWeight: 800, boxShadow: "none" }}
+        >
+          Continuar
+        </Button>
+      }
+    >
+      <Stack spacing={1.75}>
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1}
+          sx={{
+            p: 1.5,
+            borderRadius: "14px",
+            border: `1px dashed ${alpha(theme.palette.warning.main, 0.5)}`,
+            bgcolor: softTint(theme, theme.palette.warning.main, 0.06, 0.1),
+          }}
+        >
+          <Typography
+            sx={{
+              flex: 1,
+              textAlign: "center",
+              color: theme.palette.app.text,
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: { xs: "1rem", sm: "1.15rem" },
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              userSelect: "all",
+              overflowWrap: "anywhere",
+            }}
+          >
+            {code}
+          </Typography>
+          <Tooltip title="Copiar">
+            <IconButton onClick={() => onCopy(code)} aria-label="Copiar clave de recuperación">
+              <ContentCopyRoundedIcon sx={{ fontSize: 19 }} />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+        <Typography
+          sx={{ color: theme.palette.app.secondary, fontSize: "0.84rem", fontWeight: 600 }}
+        >
+          Anotala en papel o guardala en un lugar seguro fuera de CodeDesk. No la vas a poder ver de
+          nuevo.
+        </Typography>
+        <FormControlLabel
+          control={
+            <Checkbox checked={saved} onChange={(event) => setSaved(event.target.checked)} />
+          }
+          label="Ya la guardé en un lugar seguro"
+          sx={{ "& .MuiFormControlLabel-label": { fontSize: "0.88rem", fontWeight: 700 } }}
+        />
+      </Stack>
+    </AppDialog>
+  );
+}
+
+function UnlockDialog({ open, onClose, onSubmit, onForgot }) {
+  const [password, setPassword] = useState("");
+  const { busy, error, setError, run } = useVaultForm(open);
+
+  useEffect(() => {
+    if (open) setPassword("");
+  }, [open]);
+
+  const submit = (event) => {
+    event?.preventDefault();
+    if (!password) return setError("Ingresá tu contraseña maestra.");
+    run(() => onSubmit(password), "Contraseña maestra incorrecta.");
+  };
+
+  return (
+    <FormDialog
+      open={open}
+      onClose={() => !busy && onClose()}
+      onSubmit={submit}
+      saving={busy}
+      error={error}
+      icon={<LockRoundedIcon />}
+      title="Desbloquear credenciales"
+      subtitle="Ingresá tu contraseña maestra."
+      submitIcon={<LockOpenRoundedIcon />}
+      submitLabel={busy ? "Verificando..." : "Desbloquear"}
+    >
+      <IconField
+        label="Contraseña maestra"
+        password
+        autoFocus
+        autoComplete="current-password"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+        disabled={busy}
+      />
+      <Button
+        onClick={onForgot}
+        disabled={busy}
+        sx={{ alignSelf: "flex-start", px: 0.5, fontWeight: 750, textTransform: "none" }}
+      >
+        Olvidé mi contraseña maestra
+      </Button>
+    </FormDialog>
+  );
+}
+
+function RecoverDialog({ open, onClose, onSubmit }) {
+  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const { busy, error, setError, run } = useVaultForm(open);
+
+  useEffect(() => {
+    if (open) {
+      setCode("");
+      setPassword("");
+      setConfirm("");
+    }
+  }, [open]);
+
+  const submit = (event) => {
+    event?.preventDefault();
+    if (!code.trim()) return setError("Ingresá tu clave de recuperación.");
+    const problem = validateMaster(password, confirm);
+    if (problem) return setError(problem);
+    run(() => onSubmit(code, password), "La clave de recuperación no es correcta.");
+  };
+
+  return (
+    <FormDialog
+      open={open}
+      onClose={() => !busy && onClose()}
+      onSubmit={submit}
+      saving={busy}
+      error={error}
+      icon={<LockResetRoundedIcon />}
+      title="Recuperar acceso"
+      subtitle="Usá tu clave de recuperación y elegí una nueva contraseña maestra."
+      submitIcon={<LockResetRoundedIcon />}
+      submitLabel="Restablecer"
+    >
+      <IconField
+        label="Clave de recuperación"
+        icon={<KeyRoundedIcon />}
+        autoFocus
+        placeholder="XXXXX-XXXXX-XXXXX-XXXXX"
+        value={code}
+        onChange={(event) => setCode(event.target.value)}
+        disabled={busy}
+      />
+      <IconField
+        label="Nueva contraseña maestra"
+        password
+        autoComplete="new-password"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+        disabled={busy}
+      />
+      <StrengthMeter password={password} />
+      <IconField
+        label="Repetir nueva contraseña"
+        password
+        autoComplete="new-password"
+        value={confirm}
+        onChange={(event) => setConfirm(event.target.value)}
+        disabled={busy}
+      />
+    </FormDialog>
   );
 }
