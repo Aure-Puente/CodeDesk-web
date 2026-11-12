@@ -414,7 +414,7 @@ const Tareas = () => {
   }, [tasks]);
 
   const stopCompleting = (taskId) => {
-    completeTimers.current[taskId]?.forEach(clearTimeout);
+    completeTimers.current[taskId]?.timers.forEach(clearTimeout);
     delete completeTimers.current[taskId];
     setCompleting(({ [taskId]: _, ...rest }) => rest);
   };
@@ -427,19 +427,27 @@ const Tareas = () => {
       taskId: task.id,
     });
 
-  const revert = (task) => updateTask(task, { status: task.status, order: task.order ?? 0 });
+  const revert = (task, previousChecklist) =>
+    updateTask(task, {
+      status: task.status,
+      order: task.order ?? 0,
+      ...(previousChecklist && { checklist: previousChecklist }),
+    });
 
-  const completeFromCard = (task) => {
+  const cancelCompleting = (task) => {
+    const { previousChecklist } = completeTimers.current[task.id] || {};
+    stopCompleting(task.id);
+    if (toast?.taskId === task.id) closeToast();
+    if (previousChecklist) updateTask(task, { checklist: previousChecklist });
+  };
+
+  const completeFromCard = (task, previousChecklist) => {
     if (task.status === "completada") return toggleDone(task);
-    if (completeTimers.current[task.id]) {
-      stopCompleting(task.id);
-      if (toast?.taskId === task.id) closeToast();
-      return;
-    }
+    if (completeTimers.current[task.id]) return cancelCompleting(task);
 
     let committed = false;
     setCompleting((current) => ({ ...current, [task.id]: "glow" }));
-    completeTimers.current[task.id] = [
+    const timers = [
       setTimeout(
         () =>
           setCompleting((current) =>
@@ -454,8 +462,11 @@ const Tareas = () => {
         updateTask(task, { status: "completada", order: getEdgeOrder("first") });
       }, COMPLETE_DELAY),
     ];
+    completeTimers.current[task.id] = { timers, previousChecklist };
 
-    showCompletedToast(task, () => (committed ? revert(task) : stopCompleting(task.id)));
+    showCompletedToast(task, () =>
+      committed ? revert(task, previousChecklist) : cancelCompleting(task),
+    );
   };
 
   const completeFromDetail = (task) => {
@@ -472,12 +483,13 @@ const Tareas = () => {
     const changes = { checklist };
 
     if (allDone && task.status !== "completada") {
-      Object.assign(changes, { status: "completada", order: getEdgeOrder("first") });
-      showToast(`"${task.title}" se completó.`, {
-        actionLabel: "Deshacer",
-        onAction: () => updateTask(task, { status: task.status, order: task.order ?? 0 }),
-        duration: 5000,
-      });
+      if (completeTimers.current[task.id]) return;
+      updateTask(task, changes, "No se pudo actualizar el checklist.");
+      return completeFromCard({ ...task, checklist }, getChecklist(task));
+    }
+    if (!allDone && completeTimers.current[task.id]) {
+      stopCompleting(task.id);
+      if (toast?.taskId === task.id) closeToast();
     } else if (!allDone && task.status === "completada") {
       changes.status = DEFAULT_STATUS;
     }
